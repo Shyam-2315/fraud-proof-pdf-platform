@@ -1,0 +1,61 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: fraud-pdf-backend
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8025:8025"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fraud_pdf_network
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    container_name: fraud-pdf-mongodb
+    ports:
+      - "27225:27017"
+    volumes:
+      - fraud_pdf_mongo_data:/data/db
+    networks:
+      - fraud_pdf_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: fraud-pdf-redis
+    ports:
+      - "6385:6379"
+    volumes:
+      - fraud_pdf_redis_data:/data
+    networks:
+      - fraud_pdf_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  fraud_pdf_mongo_data:
+    name: fraud_pdf_mongo_data
+  fraud_pdf_redis_data:
+    name: fraud_pdf_redis_data
+
+networks:
+  fraud_pdf_network:
+    name: fraud_pdf_network
