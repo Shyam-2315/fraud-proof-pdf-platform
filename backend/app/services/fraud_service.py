@@ -156,12 +156,19 @@ class FraudService:
             )
 
         risk_points = sum(int(event["risk_points"]) for event in events)
+        fingerprint_blocking_points = sum(
+            int(event["risk_points"])
+            for event in events
+            if event["event_type"] != FraudEventType.FREE_LIMIT_REACHED.value
+        )
         final_risk_score = min(int(visitor.get("risk_score", 0)) + risk_points, 100)
+        fingerprint_blocking_score = min(fingerprint_blocking_points, 100)
         return {
             "risk_points": risk_points,
             "risk_level": calculate_risk_level(final_risk_score),
             "events": events,
-            "should_block_fingerprint": final_risk_score >= 90,
+            "should_block_fingerprint": fingerprint_blocking_score >= 90
+            and fingerprint_blocking_points > 0,
         }
 
     async def create_fraud_events(
@@ -259,11 +266,13 @@ class FraudService:
 
 
 def calculate_risk_level(score: int) -> str:
-    if score <= 39:
+    if score <= 29:
         return "LOW"
-    if score <= 69:
+    if score <= 59:
         return "MEDIUM"
-    return "HIGH"
+    if score <= 79:
+        return "HIGH"
+    return "CRITICAL"
 
 
 def detect_vpn_proxy_placeholder(ip_address: str, headers: dict[str, str]) -> bool:

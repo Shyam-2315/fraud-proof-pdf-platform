@@ -67,7 +67,12 @@ export async function identifyRequest<T>(): Promise<T> {
       local_storage_id: identity.localStorageId,
       session_id: identity.sessionId,
       fingerprint_hash: identity.fingerprintHash,
+      device_profile_hash: identity.deviceProfileHash,
+      canvas_hash: identity.canvasHash,
+      webgl_hash: identity.webglHash,
+      audio_hash: identity.audioHash,
       device_info: identity.deviceInfo,
+      automation_signals: identity.automationSignals,
     }),
   });
 }

@@ -62,8 +62,16 @@ class AdminFraudSummaryResponse(BaseModel):
     allowed_pdf_generations: int
     blocked_pdf_generations: int
     high_risk_visitors: int
+    critical_risk_visitors: int = 0
     medium_risk_visitors: int
     low_risk_visitors: int
+    vpn_proxy_attempts: int = 0
+    automation_signals: int = 0
+    linked_duplicate_visitors: int = 0
+    account_farming_signals: int = 0
+    ml_decisions_today: int = 0
+    identity_links_created: int = 0
+    training_events_collected: int = 0
 
 
 class AdminPDFItem(BaseModel):
@@ -97,6 +105,30 @@ class AdminVisitorInvestigationResponse(BaseModel):
     generated_pdfs: list[AdminPDFItem]
     fraud_events: list[FraudEventItem]
     timeline: list[TimelineItem]
+    risk_snapshots: list[dict[str, Any]] = []
+    identity_graph_links: list[dict[str, Any]] = []
+    linked_visitors: list[dict[str, Any]] = []
+    linked_accounts: list[dict[str, Any]] = []
+    ip_intelligence: list[dict[str, Any]] = []
+    behavior_events: list[dict[str, Any]] = []
+    fraud_decision_history: list[FraudEventItem] = []
+    fraud_decisions: list[dict[str, Any]] = []
+    feature_snapshots: list[dict[str, Any]] = []
+    admin_labels: list[dict[str, Any]] = []
+
+
+class FraudLabelRequest(BaseModel):
+    visitor_id: str
+    label: int
+    notes: str | None = None
+
+
+class MLTrainRequest(BaseModel):
+    demo: bool = False
+    synthetic_csv: str | None = None
+    auto_activate: bool = False
+    min_confidence: float = 0.70
+    model_type: str = "random_forest"
 
 
 class AdminAuditLogItem(BaseModel):

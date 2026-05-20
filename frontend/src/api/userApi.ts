@@ -26,8 +26,8 @@ export type GeneratePdfResponse = {
   free_limit?: number;
   plan?: string;
   limit?: number;
-  used: number;
-  remaining: number;
+  used?: number;
+  remaining?: number;
   requires_login?: boolean;
   requires_upgrade?: boolean;
 };
@@ -62,6 +62,13 @@ export function generatePdf(payload: { title: string; content: string }) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function sendBehaviorEvent(event_type: string, metadata: Record<string, unknown> = {}) {
+  return customerRequest<{ success: boolean }>("/api/behavior/event", {
+    method: "POST",
+    body: JSON.stringify({ event_type, metadata }),
+  }).catch(() => ({ success: false }));
 }
 
 export function getMyPdfHistory() {

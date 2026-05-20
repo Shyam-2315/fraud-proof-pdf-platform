@@ -7,8 +7,9 @@ from pymongo import MongoClient
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8025")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "change-me-admin-key")
-MONGO_URL = os.getenv("TEST_MONGO_URL", "mongodb://localhost:27225")
+MONGO_URL = os.getenv("TEST_MONGO_URL", os.getenv("MONGO_URL", "mongodb://localhost:27225"))
 MONGO_DB_NAME = os.getenv("TEST_MONGO_DB_NAME", "fraud_proof_pdf")
+RUN_IP_SEGMENT = uuid4().int % 200 + 1
 
 
 def _email(prefix: str) -> str:
@@ -18,7 +19,7 @@ def _email(prefix: str) -> str:
 def _register(client: httpx.Client, email: str | None = None) -> dict:
     response = client.post(
         "/api/auth/register",
-        headers={"X-Forwarded-For": f"198.51.100.{uuid4().int % 250 + 1}"},
+        headers={"X-Forwarded-For": f"198.51.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"},
         json={
             "email": email or _email("customer"),
             "full_name": "Customer Test",
@@ -35,6 +36,7 @@ def _auth_header(token: str) -> dict[str, str]:
 
 def test_auth_register_login_refresh_logout_and_me() -> None:
     email = _email("auth")
+    auth_headers = {"X-Forwarded-For": f"198.51.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"}
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         registered = _register(client, email)
         assert registered["success"] is True
@@ -49,18 +51,21 @@ def test_auth_register_login_refresh_logout_and_me() -> None:
                 "full_name": "Duplicate",
                 "password": "StrongPassword123",
             },
+            headers=auth_headers,
         )
         assert duplicate.status_code == 409
 
         wrong_login = client.post(
             "/api/auth/login",
             json={"email": email, "password": "WrongPassword123"},
+            headers=auth_headers,
         )
         assert wrong_login.status_code == 401
 
         login = client.post(
             "/api/auth/login",
             json={"email": email, "password": "StrongPassword123"},
+            headers=auth_headers,
         )
         assert login.status_code == 200
         login_body = login.json()
@@ -181,6 +186,7 @@ def test_admin_jwt_api_key_and_customer_rejection() -> None:
 
         admin_login = client.post(
             "/api/auth/login",
+            headers={"X-Forwarded-For": f"198.51.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"},
             json={
                 "email": os.getenv("DEFAULT_ADMIN_EMAIL", "admin@pdfcraft.local"),
                 "password": os.getenv("DEFAULT_ADMIN_PASSWORD", "AdminPassword123"),

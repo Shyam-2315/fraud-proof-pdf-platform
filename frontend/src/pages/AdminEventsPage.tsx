@@ -58,7 +58,14 @@ export default function AdminEventsPage() {
             <option value="HIGH">HIGH</option>
             <option value="CRITICAL">CRITICAL</option>
           </select>
-          <input className="field" value={eventType} onChange={(event) => setEventType(event.target.value)} placeholder="Event type" />
+          <input className="field" list="fraud-event-types" value={eventType} onChange={(event) => setEventType(event.target.value)} placeholder="Event type" />
+          <datalist id="fraud-event-types">
+            <option value="RISK_SCORE_UPDATED" />
+            <option value="AUTOMATION_SIGNAL_DETECTED" />
+            <option value="VPN_PROXY_DETECTED" />
+            <option value="IDENTITY_LINK_CREATED" />
+            <option value="ACCOUNT_FARMING_SUSPECTED" />
+          </datalist>
           <select className="field" value={allowed} onChange={(event) => setAllowed(event.target.value)}>
             <option value="">All outcomes</option>
             <option value="true">Allowed</option>

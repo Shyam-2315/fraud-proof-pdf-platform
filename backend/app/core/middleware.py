@@ -6,6 +6,8 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.utils.request_utils import get_client_ip
+
 logger = logging.getLogger("app.request")
 
 
@@ -38,14 +40,27 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             return response
         finally:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-            client_ip = request.client.host if request.client else "unknown"
+            client_ip = get_client_ip(request)
+            request_id = getattr(request.state, "request_id", request.headers.get("X-Request-ID", ""))
             logger.info(
-                "method=%s path=%s status_code=%s duration_ms=%s client_ip=%s",
+                "request",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": status_code,
+                    "duration_ms": duration_ms,
+                    "client_ip": client_ip,
+                },
+            )
+            logger.debug(
+                "method=%s path=%s status_code=%s duration_ms=%s client_ip=%s request_id=%s",
                 request.method,
                 request.url.path,
                 status_code,
                 duration_ms,
                 client_ip,
+                request_id,
             )
 
 

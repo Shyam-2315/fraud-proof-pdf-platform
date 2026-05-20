@@ -47,7 +47,8 @@ async def generate_pdf(
         )
     except HTTPException as exc:
         if isinstance(exc.detail, dict) and (
-            exc.detail.get("requires_login") is True
+            exc.detail.get("success") is False
+            or exc.detail.get("requires_login") is True
             or exc.detail.get("requires_upgrade") is True
         ):
             return JSONResponse(status_code=exc.status_code, content=exc.detail)

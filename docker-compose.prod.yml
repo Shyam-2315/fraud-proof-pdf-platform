@@ -1,0 +1,123 @@
+services:
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    container_name: fraud-pdf-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/nginx/conf.d:/etc/nginx/conf.d:ro
+      - fraud_pdf_proxy_certs:/etc/nginx/certs:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - fraud_pdf_prod_network
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    container_name: fraud-pdf-backend
+    env_file:
+      - ${BACKEND_ENV_FILE:-./backend/.env.production.example}
+    command:
+      - sh
+      - -c
+      - uvicorn app.main:app --host $${APP_HOST:-0.0.0.0} --port $${APP_PORT:-8025} --workers $${WEB_CONCURRENCY:-2} --proxy-headers --forwarded-allow-ips=$${FORWARDED_ALLOW_IPS:-172.25.0.0/16}
+    volumes:
+      - fraud_pdf_pdf_storage:/app/storage/generated_pdfs
+      - fraud_pdf_model_storage:/app/models/fraud
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - fraud_pdf_prod_network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/health' % os.getenv('APP_PORT', '8025'), timeout=5).read()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.your-domain.com}
+        VITE_APP_NAME: ${VITE_APP_NAME:-PDFCraft}
+        VITE_APP_ENV: ${VITE_APP_ENV:-production}
+    container_name: fraud-pdf-frontend
+    networks:
+      - fraud_pdf_prod_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  mongodb:
+    image: mongo:7
+    container_name: fraud-pdf-mongodb
+    volumes:
+      - fraud_pdf_mongo_data:/data/db
+    networks:
+      - fraud_pdf_prod_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: fraud-pdf-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - fraud_pdf_redis_data:/data
+    networks:
+      - fraud_pdf_prod_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  fraud_pdf_mongo_data:
+    name: fraud_pdf_mongo_data
+  fraud_pdf_redis_data:
+    name: fraud_pdf_redis_data
+  fraud_pdf_pdf_storage:
+    name: fraud_pdf_pdf_storage
+  fraud_pdf_model_storage:
+    name: fraud_pdf_model_storage
+  fraud_pdf_proxy_certs:
+    name: fraud_pdf_proxy_certs
+
+networks:
+  fraud_pdf_prod_network:
+    name: fraud_pdf_prod_network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

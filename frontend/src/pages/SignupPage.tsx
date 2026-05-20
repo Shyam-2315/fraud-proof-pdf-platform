@@ -1,15 +1,18 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import AuthForm from "../components/AuthForm";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useState } from "react";
+import { sendBehaviorEvent } from "../api/userApi";
 
 export default function SignupPage() {
   const { signup } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [error, setError] = useState("");
+  const state = location.state as { from?: string } | null;
 
   return (
     <div>
@@ -30,8 +33,9 @@ export default function SignupPage() {
             mode="signup"
             onSubmit={async ({ full_name, email, password }) => {
               try {
+                void sendBehaviorEvent("SIGNUP_CLICKED");
                 await signup(full_name, email, password);
-                navigate("/account", { replace: true });
+                navigate(state?.from || "/account", { replace: true });
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Signup failed.");
               }

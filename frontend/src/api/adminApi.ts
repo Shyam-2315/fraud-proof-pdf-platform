@@ -8,8 +8,16 @@ export type FraudSummary = {
   allowed_pdf_generations: number;
   blocked_pdf_generations: number;
   high_risk_visitors: number;
+  critical_risk_visitors: number;
   medium_risk_visitors: number;
   low_risk_visitors: number;
+  vpn_proxy_attempts: number;
+  automation_signals: number;
+  linked_duplicate_visitors: number;
+  account_farming_signals: number;
+  ml_decisions_today: number;
+  identity_links_created: number;
+  training_events_collected: number;
 };
 
 export type FraudEvent = {
@@ -75,6 +83,31 @@ export type VisitorInvestigation = {
   generated_pdfs: AdminPdf[];
   fraud_events: FraudEvent[];
   timeline: TimelineItem[];
+  risk_snapshots: Record<string, unknown>[];
+  identity_graph_links: Record<string, unknown>[];
+  linked_visitors: Record<string, unknown>[];
+  linked_accounts: Record<string, unknown>[];
+  ip_intelligence: Record<string, unknown>[];
+  behavior_events: Record<string, unknown>[];
+  fraud_decision_history: FraudEvent[];
+  fraud_decisions: Record<string, unknown>[];
+  feature_snapshots: Record<string, unknown>[];
+  admin_labels: Record<string, unknown>[];
+};
+
+export type MLModelVersion = {
+  id: string;
+  model_name: string;
+  version: string;
+  model_type: string;
+  status: string;
+  trained_on_event_count: number;
+  positive_label_count: number;
+  negative_label_count: number;
+  metrics: Record<string, unknown>;
+  feature_columns: string[];
+  model_path: string;
+  created_at: string;
 };
 
 export type AuditLog = {
@@ -128,4 +161,67 @@ export function getAllPdfs() {
 
 export function getAuditLogs() {
   return adminRequest<ListResponse<AuditLog>>("/api/admin/audit-logs");
+}
+
+export function getMLModels() {
+  return adminRequest<{ total: number; items: MLModelVersion[] }>("/api/admin/ml/models");
+}
+
+export function getActiveMLModel() {
+  return adminRequest<{ success: boolean; active_model: Record<string, unknown> }>("/api/admin/ml/models/active");
+}
+
+export function trainMLModel(payload: {
+  demo?: boolean;
+  synthetic_csv?: string;
+  auto_activate?: boolean;
+  min_confidence?: number;
+  model_type?: string;
+}) {
+  return adminRequest<Record<string, unknown>>("/api/admin/ml/train", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function activateMLModel(modelVersionId: string) {
+  return adminRequest<Record<string, unknown>>(`/api/admin/ml/models/${encodeURIComponent(modelVersionId)}/activate`, {
+    method: "POST",
+  });
+}
+
+export function rejectMLModel(modelVersionId: string) {
+  return adminRequest<Record<string, unknown>>(`/api/admin/ml/models/${encodeURIComponent(modelVersionId)}/reject`, {
+    method: "POST",
+  });
+}
+
+export function getFraudDecisions(filters: {
+  visitor_id?: string;
+  action_type?: string;
+} = {}) {
+  return adminRequest<ListResponse<Record<string, unknown>>>(
+    `/api/admin/fraud/decisions${query(filters)}`,
+  );
+}
+
+export function getFraudFeatures(visitorId: string) {
+  return adminRequest<ListResponse<Record<string, unknown>>>(
+    `/api/admin/fraud/features/${encodeURIComponent(visitorId)}`,
+  );
+}
+
+export function getFraudIdentityLinks(visitorId: string) {
+  return adminRequest<ListResponse<Record<string, unknown>>>(
+    `/api/admin/fraud/identity-links/${encodeURIComponent(visitorId)}`,
+  );
+}
+
+export function labelVisitor(payload: { visitor_id: string; label: 0 | 1; notes?: string }) {
+  return adminRequest<Record<string, unknown>>("/api/admin/fraud/label", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }

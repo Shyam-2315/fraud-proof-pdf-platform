@@ -9,7 +9,7 @@ import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 
 export default function AccountPage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [usage, setUsage] = useState<AccountUsage | null>(null);
   const [error, setError] = useState("");
 
@@ -39,7 +39,10 @@ export default function AccountPage() {
             <div className="mt-5 inline-flex rounded-full bg-[#eaf1ff] px-3 py-1 text-sm font-black text-[#1459d9]">
               {user?.plan || "FREE"} plan
             </div>
-            <Link className="btn-primary mt-6 w-full" to="/pricing">View plans</Link>
+            <div className="mt-6 grid gap-3">
+              <Link className="btn-primary w-full" to="/pricing">View plans</Link>
+              <button className="btn-secondary w-full" type="button" onClick={() => void logout()}>Logout</button>
+            </div>
           </section>
           <div>
             {error ? <ErrorState message={error} /> : null}

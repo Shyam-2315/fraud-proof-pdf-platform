@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, BarChart3, FileCheck2, FileX2, ShieldAlert, Users } from "lucide-react";
+import { Activity, AlertTriangle, BarChart3, Bot, Brain, Database, FileCheck2, FileX2, Link2, Network, ShieldAlert, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
@@ -61,9 +61,17 @@ export default function AdminDashboardPage() {
             <StatCard label="Fraud Events" value={summary.total_fraud_events} icon={Activity} />
             <StatCard label="Allowed Generations" value={summary.allowed_pdf_generations} icon={FileCheck2} />
             <StatCard label="Blocked Generations" value={summary.blocked_pdf_generations} icon={FileX2} />
+            <StatCard label="Critical Risk Visitors" value={summary.critical_risk_visitors} icon={ShieldAlert} />
             <StatCard label="High Risk Visitors" value={summary.high_risk_visitors} icon={AlertTriangle} />
             <StatCard label="Medium Risk Visitors" value={summary.medium_risk_visitors} icon={AlertTriangle} />
             <StatCard label="Low Risk Visitors" value={summary.low_risk_visitors} icon={AlertTriangle} />
+            <StatCard label="VPN/proxy Attempts" value={summary.vpn_proxy_attempts} icon={Network} />
+            <StatCard label="Automation Signals" value={summary.automation_signals} icon={Bot} />
+            <StatCard label="Linked Duplicate Visitors" value={summary.linked_duplicate_visitors} icon={Link2} />
+            <StatCard label="Account Farming Signals" value={summary.account_farming_signals} icon={Users} />
+            <StatCard label="ML Decisions Today" value={summary.ml_decisions_today} icon={Brain} />
+            <StatCard label="Identity Links Created" value={summary.identity_links_created} icon={Link2} />
+            <StatCard label="Training Events Collected" value={summary.training_events_collected} icon={Database} />
           </div>
         ) : null}
       </main>

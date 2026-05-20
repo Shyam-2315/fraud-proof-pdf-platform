@@ -3,6 +3,8 @@ import AdminAuditLogsPage from "./pages/AdminAuditLogsPage";
 import AdminDashboardPage from "./pages/AdminDashboardPage";
 import AdminEventsPage from "./pages/AdminEventsPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
+import AdminMLEnginePage from "./pages/AdminMLEnginePage";
+import AdminMLModelsPage from "./pages/AdminMLModelsPage";
 import AdminPdfsPage from "./pages/AdminPdfsPage";
 import AdminProtectedRoute from "./components/AdminProtectedRoute";
 import AdminVisitorInvestigationPage from "./pages/AdminVisitorInvestigationPage";
@@ -34,6 +36,8 @@ export default function App() {
       <Route element={<AdminProtectedRoute />}>
         <Route path="/admin/dashboard" element={<AdminDashboardPage />} />
         <Route path="/admin/events" element={<AdminEventsPage />} />
+        <Route path="/admin/ml" element={<AdminMLEnginePage />} />
+        <Route path="/admin/ml/models" element={<AdminMLModelsPage />} />
         <Route path="/admin/visitors" element={<AdminVisitorsPage />} />
         <Route
           path="/admin/visitor/:visitorId"

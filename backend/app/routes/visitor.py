@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from app.core.public_config import (
     CUSTOMER_COOKIE_NAME,
     LOGIN_REQUIRED_MESSAGE,
+    customer_cookie_options,
     get_visitor_cookie,
 )
 from app.repositories.visitor_repository import VisitorRepository
@@ -52,9 +53,7 @@ async def identify_visitor(
         key=CUSTOMER_COOKIE_NAME,
         value=cookie_id,
         max_age=ANON_COOKIE_MAX_AGE,
-        httponly=True,
-        samesite="lax",
-        secure=False,
+        **customer_cookie_options(),
     )
 
     return VisitorIdentifyResponse(
@@ -81,16 +80,20 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
         )
 
     usage_summary = build_usage_summary(visitor)
+    requires_login = (
+        bool(visitor.get("is_blocked", False))
+        or usage_summary["remaining_free_uses"] <= 0
+    )
     return VisitorStatusResponse(
         visitor_id=visitor["_id"],
         **usage_summary,
         is_blocked=bool(visitor.get("is_blocked", False)),
         message=(
             LOGIN_REQUIRED_MESSAGE
-            if bool(visitor.get("is_blocked", False))
+            if requires_login
             else _build_customer_status_message(usage_summary["remaining_free_uses"])
         ),
-        requires_login=bool(visitor.get("is_blocked", False)),
+        requires_login=requires_login,
     )
 
 

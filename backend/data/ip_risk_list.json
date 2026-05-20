@@ -1,0 +1,25 @@
+{
+  "203.0.113.10": {
+    "is_vpn": true,
+    "is_proxy": false,
+    "is_tor": false,
+    "is_datacenter": true,
+    "risk_score": 60,
+    "provider": "LOCAL_DEMO"
+  },
+  "203.0.113.66": {
+    "is_vpn": true,
+    "is_proxy": true,
+    "is_datacenter": true,
+    "asn": "AS64500",
+    "country": "US",
+    "risk_score": 75
+  },
+  "198.51.100.99": {
+    "is_tor": true,
+    "is_known_abuser": true,
+    "asn": "AS64501",
+    "country": "US",
+    "risk_score": 95
+  }
+}

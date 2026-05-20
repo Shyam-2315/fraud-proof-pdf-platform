@@ -5,6 +5,7 @@ import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useState } from "react";
+import { sendBehaviorEvent } from "../api/userApi";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -32,6 +33,7 @@ export default function LoginPage() {
             mode="login"
             onSubmit={async ({ email, password }) => {
               try {
+                void sendBehaviorEvent("LOGIN_CLICKED");
                 await login(email, password);
                 navigate(state?.from || "/account", { replace: true });
               } catch (err) {

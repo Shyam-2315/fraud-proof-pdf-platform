@@ -2,7 +2,9 @@ import logging
 
 from fastapi import HTTPException, Request, status
 
+from app.config import get_settings
 from app.redis_client import get_redis
+from app.utils.request_utils import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,8 @@ class RateLimitService:
         limit: int,
         window_seconds: int,
     ) -> None:
+        if not get_settings().RATE_LIMIT_ENABLED:
+            return
         key = f"rate:{bucket}:{identifier}"
         try:
             redis = get_redis()
@@ -34,7 +38,4 @@ class RateLimitService:
 
 
 def client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",", 1)[0].strip()
-    return request.client.host if request.client else "unknown"
+    return get_client_ip(request)

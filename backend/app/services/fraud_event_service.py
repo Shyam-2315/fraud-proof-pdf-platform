@@ -6,6 +6,7 @@ from app.core.public_config import get_visitor_cookie
 from app.models.fraud_event import FraudEventType, FraudSeverity
 from app.repositories.fraud_event_repository import FraudEventRepository
 from app.schemas.fraud_event import FraudEventItem
+from app.utils.request_utils import get_client_ip
 from app.utils.security import generate_uuid, normalize_ip, utc_now
 
 class FraudEventService:
@@ -95,7 +96,7 @@ class FraudEventService:
                 or _last_or_none(visitor.get("session_ids", []))
             ),
             cookie_id=get_visitor_cookie(request.cookies) or visitor.get("cookie_id"),
-            ip_address=normalize_ip(request.client.host if request.client else ""),
+            ip_address=normalize_ip(get_client_ip(request)),
             user_agent=request.headers.get("user-agent"),
             metadata=metadata,
         )

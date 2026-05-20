@@ -2,18 +2,26 @@ import json
 from functools import lru_cache
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Fraud Proof PDF Platform"
+    APP_NAME: str = "PDFCraft"
     APP_ENV: str = "development"
     APP_PORT: int = 8025
+    APP_HOST: str = "0.0.0.0"
     FRONTEND_URL: str = "http://localhost:3025"
+    BACKEND_PUBLIC_URL: str = "http://localhost:8025"
 
-    MONGO_URL: str = "mongodb://mongodb:27017"
-    MONGO_DB_NAME: str = "fraud_proof_pdf"
+    MONGODB_URL: str = Field(
+        default="mongodb://mongodb:27017",
+        validation_alias=AliasChoices("MONGODB_URL", "MONGO_URL"),
+    )
+    MONGODB_DB_NAME: str = Field(
+        default="fraud_pdf",
+        validation_alias=AliasChoices("MONGODB_DB_NAME", "MONGO_DB_NAME"),
+    )
 
     REDIS_URL: str = "redis://redis:6379/0"
 
@@ -24,16 +32,34 @@ class Settings(BaseSettings):
         ]
     )
 
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str = "change-me-super-secret"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FREE_USAGE_LIMIT: int = 2
-    ADMIN_API_KEY: str
-    DEFAULT_ADMIN_EMAIL: str | None = None
-    DEFAULT_ADMIN_PASSWORD: str | None = None
+    ADMIN_API_KEY: str = "change-me-admin-key"
+    DEFAULT_ADMIN_EMAIL: str | None = "admin@pdfcraft.local"
+    DEFAULT_ADMIN_PASSWORD: str | None = "AdminPassword123"
     DEFAULT_ADMIN_NAME: str = "PDFCraft Admin"
+    ENABLE_DEFAULT_ADMIN_SEED: bool = True
     PDF_STORAGE_DIR: str = "storage/generated_pdfs"
+    SECURE_COOKIES: bool = False
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_DOMAIN: str | None = None
+    TRUST_PROXY_HEADERS: bool = False
+    TRUSTED_PROXY_IPS: str = ""
+    ENABLE_IP_INTELLIGENCE: bool = False
+    IP_INTELLIGENCE_PROVIDER: str = "LOCAL"
+    MAXMIND_ACCOUNT_ID: str | None = None
+    MAXMIND_LICENSE_KEY: str | None = None
+    IP_RISK_LIST_PATH: str = "data/ip_risk_list.json"
+    LOG_LEVEL: str = "INFO"
+    JSON_LOGS: bool = True
+    RATE_LIMIT_ENABLED: bool = True
+    ML_MODELS_DIR: str = "models/fraud"
+    ML_AUTO_LOAD_ACTIVE_MODEL: bool = True
+    ENABLE_API_DOCS: bool = True
+    WEB_CONCURRENCY: int = 1
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -51,6 +77,41 @@ class Settings(BaseSettings):
                 return json.loads(stripped)
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @field_validator("COOKIE_SAMESITE")
+    @classmethod
+    def validate_cookie_samesite(cls, value: str) -> str:
+        normalized = value.lower()
+        if normalized not in {"lax", "strict", "none"}:
+            raise ValueError("COOKIE_SAMESITE must be lax, strict, or none")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        env = self.APP_ENV.lower()
+        if env != "production":
+            return self
+
+        insecure_secret_values = {
+            "change-me-super-secret",
+            "change-me-in-production",
+        }
+        insecure_admin_keys = {
+            "change-me-admin-key",
+        }
+        if self.JWT_SECRET_KEY in insecure_secret_values or len(self.JWT_SECRET_KEY) < 24:
+            raise ValueError("JWT_SECRET_KEY must be changed to a strong secret in production")
+        if self.ADMIN_API_KEY in insecure_admin_keys or len(self.ADMIN_API_KEY) < 24:
+            raise ValueError("ADMIN_API_KEY must be changed to a strong key in production")
+        if self.ENABLE_DEFAULT_ADMIN_SEED and self.DEFAULT_ADMIN_PASSWORD == "AdminPassword123":
+            raise ValueError(
+                "DEFAULT_ADMIN_PASSWORD must be changed or ENABLE_DEFAULT_ADMIN_SEED=false in production"
+            )
+        if not self.SECURE_COOKIES:
+            raise ValueError("SECURE_COOKIES must be true in production")
+        if "*" in self.CORS_ORIGINS:
+            raise ValueError("Wildcard CORS origins are not allowed in production")
+        return self
 
 
 @lru_cache

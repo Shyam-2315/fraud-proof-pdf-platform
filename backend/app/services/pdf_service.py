@@ -5,7 +5,7 @@ from fastapi import HTTPException, Request, status
 
 from app.config import get_settings
 from app.core.auth import get_current_user_optional
-from app.core.public_config import LOGIN_REQUIRED_MESSAGE, get_visitor_cookie
+from app.core.public_config import get_visitor_cookie
 from app.models.fraud import BlockedEntityType, FraudEventType, FraudSeverity
 from app.models.fraud_event import (
     FraudEventType as AdminFraudEventType,
@@ -25,7 +25,10 @@ from app.schemas.pdf import (
     PDFHistoryResponse,
 )
 from app.services.fraud_event_service import FraudEventService
+from app.services.behavior_service import BehaviorService, content_hash
+from app.services.fraud_decision_service import FraudDecisionService
 from app.services.fraud_service import FraudService
+from app.services.rate_limit_service import client_ip
 from app.services.user_usage_service import UserUsageService
 from app.services.visitor_service import build_usage_summary
 from app.utils.pdf_generator import generate_simple_pdf
@@ -39,6 +42,8 @@ class PDFService:
         fraud_service: FraudService | None = None,
         fraud_event_service: FraudEventService | None = None,
         user_usage_service: UserUsageService | None = None,
+        fraud_decision_service: FraudDecisionService | None = None,
+        behavior_service: BehaviorService | None = None,
     ) -> None:
         self.settings = get_settings()
         self.visitor_repository = visitor_repository or VisitorRepository()
@@ -46,6 +51,8 @@ class PDFService:
         self.fraud_service = fraud_service or FraudService()
         self.fraud_event_service = fraud_event_service or FraudEventService()
         self.user_usage_service = user_usage_service or UserUsageService()
+        self.fraud_decision_service = fraud_decision_service or FraudDecisionService()
+        self.behavior_service = behavior_service or BehaviorService()
 
     async def generate_pdf_for_anonymous_visitor(
         self,
@@ -81,8 +88,102 @@ class PDFService:
         payload: PDFGenerateRequest,
     ) -> PDFGenerateResponse:
         visitor = await self._get_visitor_from_request(request)
+        decision = await self.fraud_decision_service.decide(
+            visitor=visitor,
+            request=request,
+            action_type="PDF_GENERATE_ATTEMPT",
+            payload=payload,
+        )
+        await self.fraud_event_service.create_from_request(
+            request=request,
+            visitor={**visitor, "risk_score": decision["risk_score"], "risk_level": decision["risk_level"]},
+            event_type=AdminFraudEventType.FRAUD_DECISION_RECORDED.value,
+            severity=_severity_for_decision(decision["decision"], decision["risk_level"]),
+            action=f"Fraud decision: {decision['decision']}.",
+            allowed=decision["decision"] in {"ALLOW", "ALLOW_LOG"},
+            reason=_decision_reason_text(decision),
+            metadata=decision,
+        )
+        if decision["decision"] == "REQUIRE_LOGIN":
+            free_limit_reached = int(visitor.get("free_usage_count", 0)) >= self.settings.FREE_USAGE_LIMIT
+            await self.behavior_service.record_internal_event(
+                visitor_id=visitor["_id"],
+                user_id=None,
+                event_type="LIMIT_REACHED",
+                metadata={"reason": "REQUIRE_LOGIN"},
+            )
+            if free_limit_reached:
+                visitor = await self.visitor_repository.mark_visitor_blocked(
+                    visitor_id=visitor["_id"],
+                    reason="FREE_LIMIT_REACHED",
+                ) or visitor
+                await self.fraud_service.create_blocked_entity(
+                    entity_type=BlockedEntityType.VISITOR.value,
+                    entity_value=visitor["_id"],
+                    reason="FREE_LIMIT_REACHED",
+                    risk_score=int(decision["risk_score"]),
+                )
+            await self.fraud_event_service.create_from_request(
+                request=request,
+                visitor=visitor,
+                event_type=AdminFraudEventType.PDF_GENERATION_BLOCKED.value,
+                severity=AdminFraudSeverity.HIGH.value,
+                action="PDF generation required login.",
+                allowed=False,
+                reason="REQUIRE_LOGIN",
+                metadata={"title": payload.title, "decision": decision},
+            )
+            await self.fraud_decision_service.decide(
+                visitor=visitor,
+                request=request,
+                action_type="PDF_GENERATE_BLOCKED",
+                payload=payload,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_build_limit_response(
+                    free_limit=self.settings.FREE_USAGE_LIMIT,
+                    used=int(visitor.get("free_usage_count", 0)),
+                ),
+            )
+        if decision["decision"] == "BLOCK":
+            await self.fraud_event_service.create_from_request(
+                request=request,
+                visitor=visitor,
+                event_type=AdminFraudEventType.PDF_GENERATION_BLOCKED.value,
+                severity=AdminFraudSeverity.CRITICAL.value,
+                action="PDF generation blocked.",
+                allowed=False,
+                reason="CRITICAL_RISK",
+                metadata={"title": payload.title, "decision": decision},
+            )
+            await self.fraud_decision_service.decide(
+                visitor=visitor,
+                request=request,
+                action_type="PDF_GENERATE_BLOCKED",
+                payload=payload,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_build_block_response(
+                    used=int(visitor.get("free_usage_count", 0)),
+                    free_limit=self.settings.FREE_USAGE_LIMIT,
+                ),
+            )
 
         if bool(visitor.get("is_blocked", False)):
+            block_reason = visitor.get("block_reason") or "VISITOR_BLOCKED"
+            if block_reason == "FREE_LIMIT_REACHED":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=_build_limit_response(
+                        free_limit=self.settings.FREE_USAGE_LIMIT,
+                        used=min(
+                            int(visitor.get("free_usage_count", 0)),
+                            self.settings.FREE_USAGE_LIMIT,
+                        ),
+                    ),
+                )
             await self.fraud_event_service.create_from_request(
                 request=request,
                 visitor=visitor,
@@ -103,7 +204,7 @@ class PDFService:
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_limit_response(
+                detail=_build_block_response(
                     free_limit=self.settings.FREE_USAGE_LIMIT,
                     used=min(
                         int(visitor.get("free_usage_count", 0)),
@@ -196,8 +297,9 @@ class PDFService:
                 "generation_type": PDFGenerationType.ANONYMOUS.value,
                 "owner_type": PDFOwnerType.ANONYMOUS.value,
                 "created_at": utc_now(),
-                "ip_address": normalize_ip(request.client.host if request.client else ""),
+                "ip_address": normalize_ip(client_ip(request)),
                 "fingerprint_hash": visitor.get("primary_fingerprint_hash", ""),
+                "content_hash": content_hash(payload.content),
             }
             await self.pdf_repository.create_pdf_record(pdf_data)
             updated_visitor = await self.visitor_repository.increment_free_usage(
@@ -213,6 +315,18 @@ class PDFService:
                 action="PDF generation allowed.",
                 allowed=True,
                 metadata={"pdf_id": pdf_id, "title": payload.title},
+            )
+            await self.behavior_service.record_internal_event(
+                visitor_id=updated_visitor["_id"],
+                user_id=None,
+                event_type="PDF_GENERATED",
+                metadata={"pdf_id": pdf_id, "content_hash": content_hash(payload.content)},
+            )
+            await self.fraud_decision_service.decide(
+                visitor=updated_visitor,
+                request=request,
+                action_type="PDF_GENERATE_ALLOWED",
+                payload=payload,
             )
         except HTTPException:
             raise
@@ -305,6 +419,25 @@ class PDFService:
                     "remaining": 0,
                 },
             )
+        if visitor is not None:
+            decision = await self.fraud_decision_service.decide(
+                visitor=visitor,
+                request=request,
+                action_type="PDF_GENERATE_ATTEMPT",
+                user=current_user,
+                payload=payload,
+            )
+            if decision["decision"] == "ALLOW_LOG":
+                await self.fraud_event_service.create_from_request(
+                    request=request,
+                    visitor={**visitor, "risk_score": decision["risk_score"], "risk_level": decision["risk_level"]},
+                    event_type=AdminFraudEventType.FRAUD_DECISION_RECORDED.value,
+                    severity=_severity_for_decision(decision["decision"], decision["risk_level"]),
+                    action="Logged-in generation allowed with admin review signal.",
+                    allowed=True,
+                    reason=_decision_reason_text(decision),
+                    metadata=decision,
+                )
 
         try:
             file_name, file_path = await asyncio.to_thread(
@@ -325,15 +458,31 @@ class PDFService:
                 "generation_type": PDFGenerationType.AUTHENTICATED.value,
                 "owner_type": PDFOwnerType.USER.value,
                 "created_at": utc_now(),
-                "ip_address": normalize_ip(request.client.host if request.client else ""),
+                "ip_address": normalize_ip(client_ip(request)),
                 "fingerprint_hash": (
                     visitor.get("primary_fingerprint_hash")
                     if visitor is not None
                     else None
                 ),
+                "content_hash": content_hash(payload.content),
             }
             await self.pdf_repository.create_pdf_record(pdf_data)
             usage = await self.user_usage_service.increment_after_generation(current_user)
+            await self.behavior_service.record_internal_event(
+                visitor_id=visitor["_id"] if visitor is not None else None,
+                user_id=current_user["_id"],
+                event_type="PDF_GENERATED",
+                metadata={"pdf_id": pdf_id, "content_hash": content_hash(payload.content)},
+            )
+            if visitor is not None:
+                await self.fraud_decision_service.decide(
+                    visitor=visitor,
+                    request=request,
+                    action_type="PDF_GENERATE_ALLOWED",
+                    user=current_user,
+                    payload=payload,
+                    normal_flow=True,
+                )
         except HTTPException:
             raise
         except Exception as exc:
@@ -370,6 +519,7 @@ class PDFService:
         if current_user is not None and current_user.get("role") == UserRole.ADMIN.value:
             return pdf_record
         if current_user is not None and pdf_record.get("user_id") == current_user["_id"]:
+            await self._record_download_decision(request, current_user, await self._get_optional_visitor_from_request(request))
             return pdf_record
 
         visitor = await self._get_optional_visitor_from_request(request)
@@ -379,9 +529,26 @@ class PDFService:
             and pdf_record.get("visitor_id") == visitor["_id"]
             and not pdf_record.get("user_id")
         ):
+            await self._record_download_decision(request, None, visitor)
             return pdf_record
 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="PDF not found.")
+
+    async def _record_download_decision(
+        self,
+        request: Request,
+        current_user: dict[str, Any] | None,
+        visitor: dict[str, Any] | None,
+    ) -> None:
+        if visitor is None:
+            return
+        await self.fraud_decision_service.decide(
+            visitor=visitor,
+            request=request,
+            action_type="DOWNLOAD",
+            user=current_user,
+            normal_flow=True,
+        )
 
     async def _get_visitor_from_request(self, request: Request) -> dict[str, Any]:
         cookie_id = get_visitor_cookie(request.cookies)
@@ -432,9 +599,7 @@ class PDFService:
                         ),
                         "session_id": _last_or_none(visitor.get("session_ids", [])),
                         "fingerprint_hash": visitor.get("primary_fingerprint_hash"),
-                        "ip_address": normalize_ip(
-                            request.client.host if request.client else ""
-                        ),
+                        "ip_address": normalize_ip(client_ip(request)),
                         "user_agent": request.headers.get("user-agent"),
                     },
                 }
@@ -470,12 +635,43 @@ def _first_or_empty(values: list[str]) -> str:
     return values[0] if values else ""
 
 
-def _build_limit_response(free_limit: int, used: int) -> dict[str, int | bool | str]:
+def _build_limit_response(
+    free_limit: int,
+    used: int,
+    message: str = "Please log in to continue.",
+) -> dict[str, bool | str]:
     return {
         "success": False,
-        "message": LOGIN_REQUIRED_MESSAGE,
-        "free_limit": free_limit,
-        "used": min(used, free_limit),
-        "remaining": 0,
+        "message": message,
         "requires_login": True,
     }
+
+
+def _build_block_response(free_limit: int, used: int) -> dict[str, bool | str]:
+    return {
+        "success": False,
+        "message": "We could not process this request right now. Please try again later.",
+    }
+
+
+def _severity_for_decision(decision: str, risk_level: str) -> str:
+    if decision == "BLOCK" or risk_level == "CRITICAL":
+        return AdminFraudSeverity.CRITICAL.value
+    if decision == "REQUIRE_LOGIN" or risk_level == "HIGH":
+        return AdminFraudSeverity.HIGH.value
+    if decision == "ALLOW_LOG" or risk_level == "MEDIUM":
+        return AdminFraudSeverity.MEDIUM.value
+    return AdminFraudSeverity.LOW.value
+
+
+def _decision_reason_text(decision: dict[str, Any]) -> str | None:
+    reasons = decision.get("reasons") or []
+    if not reasons:
+        return None
+    values: list[str] = []
+    for reason in reasons:
+        if isinstance(reason, dict):
+            values.append(str(reason.get("message") or reason.get("code") or reason))
+        else:
+            values.append(str(reason))
+    return "; ".join(values)

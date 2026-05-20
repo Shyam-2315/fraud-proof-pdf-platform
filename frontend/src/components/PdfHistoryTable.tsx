@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
 import { API_BASE_URL, getAccessToken } from "../api/client";
+import { sendBehaviorEvent } from "../api/userApi";
 import type { PdfHistoryItem } from "../api/userApi";
 import { getIdentityHeaders } from "../utils/visitorIdentity";
 
@@ -48,6 +49,7 @@ export default function PdfHistoryTable({ items }: { items: PdfHistoryItem[] }) 
 }
 
 async function downloadPdf(item: PdfHistoryItem) {
+  await sendBehaviorEvent("DOWNLOAD_CLICKED", { pdf_id: item.pdf_id });
   const headers = new Headers(await getIdentityHeaders());
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -58,6 +60,11 @@ async function downloadPdf(item: PdfHistoryItem) {
   if (!response.ok) return;
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
-  window.open(url, "_blank", "noopener,noreferrer");
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = item.file_name || `${item.pdf_id}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

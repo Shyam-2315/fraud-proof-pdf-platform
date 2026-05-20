@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { getVisitorInvestigation, type VisitorInvestigation } from "../api/adminApi";
+import { labelVisitor } from "../api/adminApi";
 import AdminNavbar from "../components/AdminNavbar";
 import ErrorState from "../components/ErrorState";
 import LoadingState from "../components/LoadingState";
@@ -19,6 +20,7 @@ export default function AdminVisitorInvestigationPage() {
   const [data, setData] = useState<VisitorInvestigation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [labelNotes, setLabelNotes] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,6 +39,11 @@ export default function AdminVisitorInvestigationPage() {
     }
     load();
   }, [visitorId]);
+
+  async function applyLabel(label: 0 | 1) {
+    await labelVisitor({ visitor_id: visitorId, label, notes: labelNotes });
+    setData(await getVisitorInvestigation(visitorId));
+  }
 
   return (
     <div>
@@ -62,6 +69,52 @@ export default function AdminVisitorInvestigationPage() {
               <div className="panel p-5">
                 <h2 className="mb-3 text-xl font-black text-[#10213f]">Fraud events by visitor</h2>
                 <JsonBlock value={data.fraud_events} />
+              </div>
+            </section>
+            <section className="grid gap-4 md:grid-cols-2">
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Identity graph links</h2>
+                <JsonBlock value={data.identity_graph_links} />
+              </div>
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Linked accounts</h2>
+                <JsonBlock value={data.linked_accounts} />
+              </div>
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">IP intelligence</h2>
+                <JsonBlock value={data.ip_intelligence} />
+              </div>
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Risk snapshots</h2>
+                <JsonBlock value={data.risk_snapshots} />
+              </div>
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Behavior timeline</h2>
+                <JsonBlock value={data.behavior_events} />
+              </div>
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Fraud decision history</h2>
+                <JsonBlock value={data.fraud_decisions || data.fraud_decision_history} />
+              </div>
+            </section>
+            <section className="grid gap-4 md:grid-cols-2">
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Feature snapshots</h2>
+                <JsonBlock value={data.feature_snapshots} />
+              </div>
+              <div className="panel p-5">
+                <h2 className="mb-3 text-xl font-black text-[#10213f]">Admin label controls</h2>
+                <textarea
+                  className="field min-h-28"
+                  value={labelNotes}
+                  onChange={(event) => setLabelNotes(event.target.value)}
+                  placeholder="Review notes"
+                />
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <button className="btn-secondary" type="button" onClick={() => applyLabel(0)}>Mark Normal</button>
+                  <button className="btn-primary" type="button" onClick={() => applyLabel(1)}>Mark Suspicious</button>
+                </div>
+                <JsonBlock value={data.admin_labels} />
               </div>
             </section>
             <section className="panel p-5">

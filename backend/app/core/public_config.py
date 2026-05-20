@@ -8,3 +8,17 @@ LEGACY_COOKIE_NAME = "anon_id"
 
 def get_visitor_cookie(cookies: dict[str, str]) -> str | None:
     return cookies.get(CUSTOMER_COOKIE_NAME) or cookies.get(LEGACY_COOKIE_NAME)
+
+
+def customer_cookie_options() -> dict[str, object]:
+    from app.config import get_settings
+
+    settings = get_settings()
+    options: dict[str, object] = {
+        "httponly": True,
+        "samesite": settings.COOKIE_SAMESITE,
+        "secure": settings.SECURE_COOKIES,
+    }
+    if settings.COOKIE_DOMAIN:
+        options["domain"] = settings.COOKIE_DOMAIN
+    return options

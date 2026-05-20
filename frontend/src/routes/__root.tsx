@@ -33,7 +33,9 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+  if (import.meta.env.DEV) {
+    console.error(error);
+  }
   const router = useRouter();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -76,7 +78,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function VisitorBootstrap() {
   useEffect(() => {
-    identifyVisitor().catch((e) => console.warn("Visitor identify failed:", e?.message));
+    identifyVisitor().catch((e) => {
+      if (import.meta.env.DEV) {
+        console.warn("Visitor identify failed:", e?.message);
+      }
+    });
   }, []);
   return null;
 }

@@ -6,6 +6,10 @@ from pymongo.errors import DuplicateKeyError
 from app.core.auth import hash_password, verify_password
 from app.core.public_config import get_visitor_cookie
 from app.models.fraud import FraudEventType, FraudSeverity
+from app.models.fraud_event import FraudEventType as AdminFraudEventType
+from app.models.fraud_event import FraudSeverity as AdminFraudSeverity
+from app.models.identity import IdentityLinkType
+from app.repositories.identity_repository import IdentityLinkRepository
 from app.models.user import UserPlan, UserRole
 from app.repositories.pdf_repository import PDFRepository
 from app.repositories.user_repository import UserRepository
@@ -20,7 +24,10 @@ from app.schemas.auth import (
     UserRegisterRequest,
     UserResponse,
 )
+from app.services.fraud_event_service import FraudEventService
 from app.services.fraud_service import FraudService
+from app.fraud_engine.decision_engine import FraudEngineDecisionService
+from app.services.rate_limit_service import client_ip
 from app.services.token_service import TokenService
 from app.utils.security import generate_uuid, normalize_ip, utc_now
 
@@ -32,13 +39,19 @@ class AuthService:
         visitor_repository: VisitorRepository | None = None,
         pdf_repository: PDFRepository | None = None,
         fraud_service: FraudService | None = None,
+        fraud_event_service: FraudEventService | None = None,
+        identity_link_repository: IdentityLinkRepository | None = None,
         token_service: TokenService | None = None,
+        fraud_engine_decision_service: FraudEngineDecisionService | None = None,
     ) -> None:
         self.user_repository = user_repository or UserRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.pdf_repository = pdf_repository or PDFRepository()
         self.fraud_service = fraud_service or FraudService()
+        self.fraud_event_service = fraud_event_service or FraudEventService()
+        self.identity_link_repository = identity_link_repository or IdentityLinkRepository()
         self.token_service = token_service or TokenService()
+        self.fraud_engine_decision_service = fraud_engine_decision_service or FraudEngineDecisionService()
 
     def build_user_response(self, user: dict[str, Any]) -> UserResponse:
         return build_user_response(user)
@@ -70,6 +83,9 @@ class AuthService:
             "updated_at": now,
             "last_login_at": None,
             "linked_visitor_ids": [],
+            "fingerprint_hashes": [],
+            "device_profile_hashes": [],
+            "ip_addresses": [],
         }
         try:
             user = await self.user_repository.create_user(user_data)
@@ -83,6 +99,7 @@ class AuthService:
             user=user,
             request=request,
             audit_message="High-risk anonymous visitor linked during registration.",
+            is_registration=True,
         )
         user = linked_user or user
         return await self._build_auth_response(user, "Account created successfully.")
@@ -111,6 +128,7 @@ class AuthService:
             user=user,
             request=request,
             audit_message="High-risk anonymous visitor linked during login.",
+            is_registration=False,
         )
         user = linked_user or user
         return await self._build_auth_response(user, "Logged in successfully.")
@@ -155,20 +173,58 @@ class AuthService:
         user: dict[str, Any],
         request: Request,
         audit_message: str,
+        is_registration: bool,
     ) -> dict[str, Any] | None:
         cookie_id = get_visitor_cookie(request.cookies)
         visitor = await self.visitor_repository.find_by_cookie_id(cookie_id)
         if visitor is None:
             return user
+        await self.fraud_engine_decision_service.decide(
+            visitor=visitor,
+            request=request,
+            action_type="SIGNUP" if is_registration else "LOGIN",
+            user=user,
+            context={
+                "account_created_after_free_limit": is_registration
+                and (int(visitor.get("free_usage_count", 0)) >= 2 or bool(visitor.get("is_blocked", False)))
+            },
+            normal_flow=True,
+        )
 
         linked_user = await self.user_repository.link_visitor(
             user_id=user["_id"],
             visitor_id=visitor["_id"],
         )
+        linked_user = await self.user_repository.add_device_link(
+            user_id=user["_id"],
+            fingerprint_hash=visitor.get("primary_fingerprint_hash"),
+            device_profile_hash=_last(visitor.get("device_profile_hashes", [])),
+            ip_address=normalize_ip(client_ip(request)),
+        ) or linked_user
+        await self.identity_link_repository.create_link(
+            source_visitor_id=visitor["_id"],
+            target_visitor_id=user["_id"],
+            link_type=IdentityLinkType.ACCOUNT_LINK.value,
+            confidence=100,
+            reason="Visitor linked to authenticated account.",
+            matched_signals={
+                "visitor_id": visitor["_id"],
+                "user_id": user["_id"],
+                "fingerprint_hash": visitor.get("primary_fingerprint_hash"),
+                "device_profile_hash": _last(visitor.get("device_profile_hashes", [])),
+                "ip_address": normalize_ip(client_ip(request)),
+            },
+        )
         await self.pdf_repository.attach_visitor_pdfs_to_user(
             visitor_id=visitor["_id"],
             user_id=user["_id"],
         )
+        if is_registration:
+            await self._emit_account_registration_events(
+                request=request,
+                visitor=visitor,
+                user_id=user["_id"],
+            )
         if int(visitor.get("risk_score", 0)) >= 70:
             await self.fraud_service.create_fraud_events(
                 visitor_id=visitor["_id"],
@@ -182,7 +238,7 @@ class AuthService:
                             "cookie_id": cookie_id,
                             "visitor_id": visitor["_id"],
                             "ip_address": normalize_ip(
-                                request.client.host if request.client else ""
+                                client_ip(request)
                             ),
                             "user_agent": request.headers.get("user-agent"),
                             "fingerprint_hash": visitor.get("primary_fingerprint_hash"),
@@ -191,6 +247,99 @@ class AuthService:
                 ],
             )
         return linked_user or user
+
+    async def _emit_account_registration_events(
+        self,
+        request: Request,
+        visitor: dict[str, Any],
+        user_id: str,
+    ) -> None:
+        ip_address = normalize_ip(client_ip(request))
+        fingerprint_hash = visitor.get("primary_fingerprint_hash")
+        device_profile_hash = _last(visitor.get("device_profile_hashes", []))
+        device_count = await self.user_repository.count_recent_by_device(
+            fingerprint_hash=fingerprint_hash,
+            device_profile_hash=device_profile_hash,
+            hours=24,
+        )
+        ip_count = await self.user_repository.count_recent_by_ip(ip_address, hours=24)
+        await self.fraud_event_service.create_event(
+            visitor_id=visitor["_id"],
+            event_type=AdminFraudEventType.ACCOUNT_CREATED_FROM_DEVICE.value,
+            severity=AdminFraudSeverity.LOW.value,
+            action="Account created from visitor device.",
+            allowed=True,
+            reason="Account linked to visitor device profile.",
+            risk_score=int(visitor.get("risk_score", 0)),
+            risk_level=str(visitor.get("risk_level", "LOW")),
+            fingerprint_hash=fingerprint_hash,
+            local_storage_id=_last(visitor.get("local_storage_ids", [])),
+            session_id=_last(visitor.get("session_ids", [])),
+            cookie_id=get_visitor_cookie(request.cookies),
+            ip_address=ip_address,
+            user_agent=request.headers.get("user-agent"),
+            metadata={
+                "user_id": user_id,
+                "device_account_count_24h": device_count,
+                "ip_account_count_24h": ip_count,
+            },
+        )
+        if int(visitor.get("free_usage_count", 0)) >= 2 or bool(visitor.get("is_blocked", False)):
+            await self.fraud_event_service.create_event(
+                visitor_id=visitor["_id"],
+                event_type=AdminFraudEventType.ACCOUNT_CREATED_AFTER_FREE_LIMIT.value,
+                severity=AdminFraudSeverity.MEDIUM.value,
+                action="Account created after anonymous limit signal.",
+                allowed=True,
+                reason="Account was created after anonymous free usage was exhausted or blocked.",
+                risk_score=int(visitor.get("risk_score", 0)),
+                risk_level=str(visitor.get("risk_level", "LOW")),
+                fingerprint_hash=fingerprint_hash,
+                ip_address=ip_address,
+                user_agent=request.headers.get("user-agent"),
+                metadata={"user_id": user_id},
+            )
+        if device_count > 3:
+            await self.fraud_event_service.create_event(
+                visitor_id=visitor["_id"],
+                event_type=AdminFraudEventType.MULTIPLE_ACCOUNTS_SAME_DEVICE.value,
+                severity=AdminFraudSeverity.HIGH.value,
+                action="Multiple accounts from same device.",
+                allowed=True,
+                reason="More than 3 accounts were created from the same fingerprint/device in 24h.",
+                risk_score=int(visitor.get("risk_score", 0)),
+                risk_level=str(visitor.get("risk_level", "LOW")),
+                fingerprint_hash=fingerprint_hash,
+                ip_address=ip_address,
+                metadata={"device_account_count_24h": device_count},
+            )
+            await self.fraud_event_service.create_event(
+                visitor_id=visitor["_id"],
+                event_type=AdminFraudEventType.ACCOUNT_FARMING_SUSPECTED.value,
+                severity=AdminFraudSeverity.HIGH.value,
+                action="Account farming suspected.",
+                allowed=True,
+                reason="Multiple accounts share a device signal.",
+                risk_score=int(visitor.get("risk_score", 0)),
+                risk_level=str(visitor.get("risk_level", "LOW")),
+                fingerprint_hash=fingerprint_hash,
+                ip_address=ip_address,
+                metadata={"device_account_count_24h": device_count},
+            )
+        if ip_count > 3:
+            await self.fraud_event_service.create_event(
+                visitor_id=visitor["_id"],
+                event_type=AdminFraudEventType.MULTIPLE_ACCOUNTS_SAME_IP.value,
+                severity=AdminFraudSeverity.MEDIUM.value,
+                action="Multiple accounts from same IP.",
+                allowed=True,
+                reason="More than 3 accounts were created from the same IP in 24h.",
+                risk_score=int(visitor.get("risk_score", 0)),
+                risk_level=str(visitor.get("risk_level", "LOW")),
+                fingerprint_hash=fingerprint_hash,
+                ip_address=ip_address,
+                metadata={"ip_account_count_24h": ip_count},
+            )
 
 
 def build_user_response(user: dict[str, Any]) -> UserResponse:
@@ -209,3 +358,7 @@ def build_user_response(user: dict[str, Any]) -> UserResponse:
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def _last(values: list[Any]) -> Any:
+    return values[-1] if values else None

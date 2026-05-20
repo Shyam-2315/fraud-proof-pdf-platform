@@ -2,16 +2,20 @@ import { BarChart3, CreditCard, FileText, History, Home, LogIn, LogOut, UserPlus
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const links = [
+const publicLinks = [
   { to: "/", label: "Home", icon: Home },
   { to: "/generate", label: "Generate", icon: FileText },
-  { to: "/usage", label: "Usage", icon: BarChart3 },
-  { to: "/history", label: "My PDFs", icon: History },
   { to: "/pricing", label: "Pricing", icon: CreditCard },
+];
+
+const accountLinks = [
+  { to: "/history", label: "My PDFs", icon: History },
+  { to: "/usage", label: "Usage", icon: BarChart3 },
 ];
 
 export default function Navbar() {
   const { isAuthenticated, logout } = useAuth();
+  const links = isAuthenticated ? [...publicLinks, ...accountLinks] : publicLinks;
 
   return (
     <header className="border-b border-[#dbe4f0] bg-white">

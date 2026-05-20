@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.admin_auth import require_admin_api_key
 from app.models.fraud_event import AdminAuditAction
@@ -12,9 +12,17 @@ from app.schemas.fraud_event import (
     AdminPDFListResponse,
     AdminVisitorInvestigationResponse,
     FraudEventListResponse,
+    FraudLabelRequest,
+    MLTrainRequest,
 )
 from app.services.admin_audit_service import AdminAuditService
 from app.services.admin_fraud_service import AdminFraudService
+from app.fraud_engine.model_registry import ModelRegistry
+from app.fraud_engine.training_service import TrainingService
+from app.models.fraud_event import FraudEventType, FraudSeverity
+from app.repositories.fraud_engine_repository import FraudEngineRepository
+from app.services.fraud_event_service import FraudEventService
+from app.utils.security import generate_uuid, utc_now
 
 router = APIRouter(
     prefix="/api/admin",
@@ -22,6 +30,10 @@ router = APIRouter(
 )
 admin_fraud_service = AdminFraudService()
 admin_audit_service = AdminAuditService()
+fraud_engine_repository = FraudEngineRepository()
+model_registry = ModelRegistry(repository=fraud_engine_repository)
+training_service = TrainingService(repository=fraud_engine_repository, registry=model_registry)
+fraud_event_service = FraudEventService()
 
 SeverityParam = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -151,3 +163,174 @@ async def admin_audit_logs(
             for log in logs
         ],
     )
+
+
+@router.post("/fraud/label", tags=["Admin Fraud"])
+async def admin_apply_fraud_label(payload: FraudLabelRequest) -> dict[str, object]:
+    if payload.label not in {0, 1}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="label must be 0 or 1")
+    label_id = generate_uuid()
+    label = await fraud_engine_repository.create_label(
+        {
+            "_id": label_id,
+            "id": label_id,
+            "visitor_id": payload.visitor_id,
+            "label": payload.label,
+            "source": "ADMIN_REVIEW",
+            "notes": payload.notes,
+            "created_by_admin": None,
+            "created_at": utc_now(),
+        }
+    )
+    updated_events = await fraud_engine_repository.update_training_labels_for_visitor(
+        visitor_id=payload.visitor_id,
+        label=payload.label,
+        source="ADMIN_REVIEW",
+        confidence=1.0,
+    )
+    await fraud_event_service.create_event(
+        visitor_id=payload.visitor_id,
+        event_type=FraudEventType.ADMIN_LABEL_APPLIED.value,
+        severity=FraudSeverity.MEDIUM.value,
+        action="Admin label applied.",
+        allowed=True,
+        reason=payload.notes,
+        metadata={"label": payload.label, "updated_training_events": updated_events},
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_APPLIED_FRAUD_LABEL.value,
+        target_type="visitor",
+        target_id=payload.visitor_id,
+        metadata={"label": payload.label, "notes": payload.notes},
+    )
+    return {"success": True, "label": label, "updated_training_events": updated_events}
+
+
+@router.get("/fraud/decisions", tags=["Admin Fraud"])
+async def admin_fraud_decisions(
+    limit: int = Query(default=100, ge=1, le=500),
+    visitor_id: str | None = None,
+    action_type: str | None = None,
+) -> dict[str, object]:
+    decisions = await fraud_engine_repository.list_decisions(
+        limit=limit,
+        visitor_id=visitor_id,
+        action_type=action_type,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_FRAUD_EVENTS.value,
+        target_type="fraud_decisions",
+        metadata={
+            "limit": limit,
+            "visitor_id": visitor_id,
+            "action_type": action_type,
+        },
+    )
+    return {"total": len(decisions), "limit": limit, "items": _sanitize_doc(decisions)}
+
+
+@router.get("/fraud/features/{visitor_id}", tags=["Admin Fraud"])
+async def admin_fraud_features(
+    visitor_id: str,
+    limit: int = Query(default=50, ge=1, le=500),
+) -> dict[str, object]:
+    snapshots = await fraud_engine_repository.list_feature_snapshots_by_visitor(
+        visitor_id=visitor_id,
+        limit=limit,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_VISITOR_INVESTIGATION.value,
+        target_type="fraud_feature_snapshots",
+        target_id=visitor_id,
+        metadata={"limit": limit},
+    )
+    return {"total": len(snapshots), "limit": limit, "items": _sanitize_doc(snapshots)}
+
+
+@router.get("/fraud/identity-links/{visitor_id}", tags=["Admin Fraud"])
+async def admin_fraud_identity_links(
+    visitor_id: str,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, object]:
+    links = await admin_fraud_service.identity_link_repository.list_by_visitor_id(
+        visitor_id=visitor_id,
+        limit=limit,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_VISITOR_INVESTIGATION.value,
+        target_type="visitor_identity_links",
+        target_id=visitor_id,
+        metadata={"limit": limit},
+    )
+    return {"total": len(links), "limit": limit, "items": _sanitize_doc(links)}
+
+
+@router.get("/ml/models", tags=["Admin ML"])
+async def admin_ml_models() -> dict[str, object]:
+    versions = await model_registry.list_versions()
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_ML_MODELS.value,
+        target_type="ml_model_versions",
+    )
+    return {"total": len(versions), "items": [_sanitize_doc(item) for item in versions]}
+
+
+@router.get("/ml/models/active", tags=["Admin ML"])
+async def admin_active_ml_model() -> dict[str, object]:
+    active = model_registry.active_config()
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_ML_MODELS.value,
+        target_type="active_ml_model",
+    )
+    return {"success": True, "active_model": active}
+
+
+@router.post("/ml/train", tags=["Admin ML"])
+async def admin_train_ml_model(payload: MLTrainRequest) -> dict[str, object]:
+    result = await training_service.train(
+        synthetic_csv=payload.synthetic_csv,
+        demo=payload.demo,
+        auto_activate=payload.auto_activate,
+        min_confidence=payload.min_confidence,
+        model_type=payload.model_type,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_TRAINED_ML_MODEL.value,
+        target_type="ml_training",
+        metadata={"result_success": result.get("success"), "auto_activate": payload.auto_activate},
+    )
+    return _sanitize_doc(result)
+
+
+@router.post("/ml/models/{model_version_id}/activate", tags=["Admin ML"])
+async def admin_activate_ml_model(model_version_id: str) -> dict[str, object]:
+    model = await model_registry.activate(model_version_id)
+    if model is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found.")
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_ACTIVATED_ML_MODEL.value,
+        target_type="ml_model_version",
+        target_id=model_version_id,
+    )
+    return {"success": True, "model": _sanitize_doc(model)}
+
+
+@router.post("/ml/models/{model_version_id}/reject", tags=["Admin ML"])
+async def admin_reject_ml_model(model_version_id: str) -> dict[str, object]:
+    model = await model_registry.reject(model_version_id)
+    if model is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found.")
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_REJECTED_ML_MODEL.value,
+        target_type="ml_model_version",
+        target_id=model_version_id,
+    )
+    return {"success": True, "model": _sanitize_doc(model)}
+
+
+def _sanitize_doc(value):
+    if isinstance(value, list):
+        return [_sanitize_doc(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_doc(item) for key, item in value.items() if key != "_id"}
+    return value

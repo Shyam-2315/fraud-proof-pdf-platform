@@ -14,10 +14,10 @@ async def connect_to_mongo() -> None:
     global _client, _database
 
     settings = get_settings()
-    _client = AsyncIOMotorClient(settings.MONGO_URL, serverSelectionTimeoutMS=5000)
-    _database = _client[settings.MONGO_DB_NAME]
+    _client = AsyncIOMotorClient(settings.MONGODB_URL, serverSelectionTimeoutMS=5000)
+    _database = _client[settings.MONGODB_DB_NAME]
     await ping_mongo()
-    logger.info("Connected to MongoDB database=%s", settings.MONGO_DB_NAME)
+    logger.info("Connected to MongoDB database=%s", settings.MONGODB_DB_NAME)
 
 
 async def close_mongo_connection() -> None:
