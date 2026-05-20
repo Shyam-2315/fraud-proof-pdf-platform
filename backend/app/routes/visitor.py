@@ -1,21 +1,24 @@
-from typing import Any
-
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from app.core.public_config import (
+    CUSTOMER_COOKIE_NAME,
+    LOGIN_REQUIRED_MESSAGE,
+    get_visitor_cookie,
+)
 from app.repositories.visitor_repository import VisitorRepository
 from app.schemas.visitor import (
-    TrackedSignals,
     VisitorIdentifyRequest,
     VisitorIdentifyResponse,
     VisitorStatusResponse,
 )
 from app.services.visitor_service import VisitorService, build_usage_summary
+from app.services.rate_limit_service import RateLimitService, client_ip
 
 router = APIRouter(prefix="/api/visitor", tags=["Visitor"])
 visitor_service = VisitorService()
 visitor_repository = VisitorRepository()
+rate_limit_service = RateLimitService()
 
-ANON_COOKIE_NAME = "anon_id"
 ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
 
@@ -25,6 +28,13 @@ async def identify_visitor(
     request: Request,
     response: Response,
 ) -> VisitorIdentifyResponse:
+    await rate_limit_service.check(
+        request,
+        bucket="visitor_identify",
+        identifier=client_ip(request),
+        limit=60,
+        window_seconds=3600,
+    )
     try:
         visitor, is_new_visitor, cookie_id = await visitor_service.identify_visitor(
             request=request,
@@ -39,7 +49,7 @@ async def identify_visitor(
         ) from exc
 
     response.set_cookie(
-        key=ANON_COOKIE_NAME,
+        key=CUSTOMER_COOKIE_NAME,
         value=cookie_id,
         max_age=ANON_COOKIE_MAX_AGE,
         httponly=True,
@@ -47,25 +57,16 @@ async def identify_visitor(
         secure=False,
     )
 
-    usage_summary = build_usage_summary(visitor)
     return VisitorIdentifyResponse(
+        success=True,
         visitor_id=visitor["_id"],
-        is_new_visitor=is_new_visitor,
-        **usage_summary,
-        risk_score=int(visitor.get("risk_score", 0)),
-        risk_level=str(visitor.get("risk_level", "LOW")),
-        is_blocked=bool(visitor.get("is_blocked", False)),
-        message=(
-            "New anonymous visitor identified."
-            if is_new_visitor
-            else "Existing anonymous visitor recognized."
-        ),
+        message="Ready to generate PDFs.",
     )
 
 
 @router.get("/status", response_model=VisitorStatusResponse)
 async def visitor_status(request: Request) -> VisitorStatusResponse:
-    cookie_id = request.cookies.get(ANON_COOKIE_NAME)
+    cookie_id = get_visitor_cookie(request.cookies)
     if not cookie_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -83,19 +84,17 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
     return VisitorStatusResponse(
         visitor_id=visitor["_id"],
         **usage_summary,
-        risk_score=int(visitor.get("risk_score", 0)),
-        risk_level=str(visitor.get("risk_level", "LOW")),
         is_blocked=bool(visitor.get("is_blocked", False)),
-        block_reason=visitor.get("block_reason"),
-        tracked_signals=_build_tracked_signals(visitor),
+        message=(
+            LOGIN_REQUIRED_MESSAGE
+            if bool(visitor.get("is_blocked", False))
+            else _build_customer_status_message(usage_summary["remaining_free_uses"])
+        ),
+        requires_login=bool(visitor.get("is_blocked", False)),
     )
 
 
-def _build_tracked_signals(visitor: dict[str, Any]) -> TrackedSignals:
-    return TrackedSignals(
-        local_storage_ids=len(visitor.get("local_storage_ids", [])),
-        session_ids=len(visitor.get("session_ids", [])),
-        fingerprint_hashes=len(visitor.get("fingerprint_hashes", [])),
-        ip_addresses=len(visitor.get("ip_addresses", [])),
-        user_agents=len(visitor.get("user_agents", [])),
-    )
+def _build_customer_status_message(remaining_free_uses: int) -> str:
+    if remaining_free_uses == 1:
+        return "You have 1 free PDF generation remaining."
+    return f"You have {remaining_free_uses} free PDF generations remaining."

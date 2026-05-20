@@ -1,0 +1,1 @@
+USER_USAGE_COLLECTION = "user_usage"

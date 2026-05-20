@@ -6,3 +6,9 @@ GENERATED_PDF_COLLECTION = "generated_pdfs"
 
 class PDFGenerationType(StrEnum):
     ANONYMOUS = "ANONYMOUS"
+    AUTHENTICATED = "AUTHENTICATED"
+
+
+class PDFOwnerType(StrEnum):
+    ANONYMOUS = "ANONYMOUS"
+    USER = "USER"

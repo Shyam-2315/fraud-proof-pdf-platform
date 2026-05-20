@@ -19,23 +19,9 @@ class VisitorIdentifyRequest(BaseModel):
 
 
 class VisitorIdentifyResponse(BaseModel):
+    success: bool
     visitor_id: str
-    is_new_visitor: bool
-    free_usage_count: int
-    free_usage_limit: int
-    remaining_free_uses: int
-    risk_score: int
-    risk_level: str
-    is_blocked: bool
     message: str
-
-
-class TrackedSignals(BaseModel):
-    local_storage_ids: int
-    session_ids: int
-    fingerprint_hashes: int
-    ip_addresses: int
-    user_agents: int
 
 
 class VisitorStatusResponse(BaseModel):
@@ -43,8 +29,6 @@ class VisitorStatusResponse(BaseModel):
     free_usage_count: int
     free_usage_limit: int
     remaining_free_uses: int
-    risk_score: int
-    risk_level: str
     is_blocked: bool
-    block_reason: str | None
-    tracked_signals: TrackedSignals
+    message: str
+    requires_login: bool = False

@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
-from pymongo import ASCENDING, ReturnDocument
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from app.database import get_database
 from app.models.visitor import VISITOR_COLLECTION
@@ -115,11 +115,23 @@ class VisitorRepository:
     async def count_visitors(self) -> int:
         return await self.get_collection().count_documents({})
 
+    async def count_documents(self, filter_query: dict[str, Any] | None = None) -> int:
+        return await self.get_collection().count_documents(filter_query or {})
+
     async def count_blocked_visitors(self) -> int:
         return await self.get_collection().count_documents({"is_blocked": True})
 
     async def count_high_risk_visitors(self) -> int:
         return await self.get_collection().count_documents({"risk_score": {"$gte": 70}})
+
+    async def list_for_admin_fraud(self, limit: int = 50) -> list[dict[str, Any]]:
+        cursor = (
+            self.get_collection()
+            .find({})
+            .sort([("risk_score", DESCENDING), ("last_seen_at", DESCENDING)])
+            .limit(limit)
+        )
+        return await cursor.to_list(length=limit)
 
 
 async def ensure_visitor_indexes() -> None:
@@ -149,5 +161,14 @@ async def ensure_visitor_indexes() -> None:
     await collection.create_index(
         [("last_seen_at", ASCENDING)],
         name="idx_visitors_last_seen_at",
+    )
+    await collection.create_index(
+        [("is_blocked", ASCENDING)],
+        name="idx_visitors_is_blocked",
+    )
+    await collection.create_index(
+        [("visitor_id", ASCENDING)],
+        name="idx_visitors_visitor_id",
+        sparse=True,
     )
     logger.info("Ensured visitor collection indexes")

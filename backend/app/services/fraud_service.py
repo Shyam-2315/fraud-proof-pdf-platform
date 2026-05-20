@@ -2,6 +2,8 @@ from typing import Any
 
 from app.config import get_settings
 from app.models.fraud import BlockedEntityType, FraudEventType, FraudSeverity
+from app.models.fraud_event import FraudSeverity as NormalizedFraudSeverity
+from app.repositories.fraud_event_repository import FraudEventRepository
 from app.repositories.fraud_repository import FraudRepository
 from app.repositories.visitor_repository import VisitorRepository
 from app.schemas.fraud import FraudEventResponse, FraudSummaryResponse
@@ -13,10 +15,12 @@ class FraudService:
         self,
         fraud_repository: FraudRepository | None = None,
         visitor_repository: VisitorRepository | None = None,
+        fraud_event_repository: FraudEventRepository | None = None,
     ) -> None:
         self.settings = get_settings()
         self.fraud_repository = fraud_repository or FraudRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
+        self.fraud_event_repository = fraud_event_repository or FraudEventRepository()
 
     def calculate_risk_level(self, score: int) -> str:
         return calculate_risk_level(score)
@@ -166,15 +170,42 @@ class FraudService:
         events: list[dict[str, Any]],
     ) -> None:
         for event in events:
-            await self.fraud_repository.create_fraud_event(
+            event_id = generate_uuid()
+            signals = event.get("signals", {})
+            event_type = event["event_type"]
+            default_allowed = event_type not in {
+                FraudEventType.FREE_LIMIT_REACHED.value,
+                FraudEventType.BLOCKED_VISITOR_REQUEST.value,
+            }
+            await self.fraud_event_repository.create(
                 {
-                    "_id": generate_uuid(),
+                    "_id": event_id,
+                    "id": event_id,
                     "visitor_id": visitor_id,
-                    "event_type": event["event_type"],
-                    "severity": event["severity"],
-                    "risk_points": event["risk_points"],
-                    "message": event["message"],
-                    "signals": event["signals"],
+                    "event_type": event_type,
+                    "severity": event.get(
+                        "severity",
+                        NormalizedFraudSeverity.LOW.value,
+                    ),
+                    "action": event_type,
+                    "allowed": event.get("allowed", default_allowed),
+                    "reason": event.get("message"),
+                    "risk_score": int(event.get("risk_score", 0)),
+                    "risk_level": event.get("risk_level", "LOW"),
+                    "fingerprint_hash": signals.get("fingerprint_hash"),
+                    "local_storage_id": signals.get("local_storage_id"),
+                    "session_id": signals.get("session_id"),
+                    "cookie_id": signals.get("cookie_id"),
+                    "ip_address": signals.get("ip_address"),
+                    "user_agent": signals.get("user_agent"),
+                    "metadata": {
+                        "message": event.get("message", ""),
+                        "risk_points": event.get("risk_points", 0),
+                        "signals": signals,
+                    },
+                    "signals": signals,
+                    "risk_points": event.get("risk_points", 0),
+                    "message": event.get("message", ""),
                     "created_at": utc_now(),
                 }
             )

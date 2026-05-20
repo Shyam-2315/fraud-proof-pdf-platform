@@ -5,18 +5,22 @@ from pydantic import BaseModel, Field
 
 class PDFGenerateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
-    content: str = Field(min_length=1, max_length=5000)
+    content: str = Field(min_length=1, max_length=20000)
 
 
 class PDFGenerateResponse(BaseModel):
     success: bool
     message: str
     pdf_id: str | None = None
+    title: str | None = None
     file_name: str | None = None
-    file_path: str | None = None
-    free_usage_count: int
-    free_usage_limit: int
-    remaining_free_uses: int
+    free_limit: int | None = None
+    plan: str | None = None
+    limit: int | None = None
+    used: int
+    remaining: int
+    requires_login: bool = False
+    requires_upgrade: bool = False
 
 
 class PDFHistoryItem(BaseModel):
@@ -31,3 +35,16 @@ class PDFHistoryResponse(BaseModel):
     visitor_id: str
     total: int
     items: list[PDFHistoryItem]
+
+
+class MyPDFHistoryItem(BaseModel):
+    pdf_id: str
+    title: str
+    file_name: str
+    created_at: datetime
+    download_url: str
+
+
+class MyPDFHistoryResponse(BaseModel):
+    total: int
+    items: list[MyPDFHistoryItem]

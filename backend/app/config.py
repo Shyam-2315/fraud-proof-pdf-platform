@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Fraud Proof PDF Platform"
     APP_ENV: str = "development"
     APP_PORT: int = 8025
+    FRONTEND_URL: str = "http://localhost:3025"
 
     MONGO_URL: str = "mongodb://mongodb:27017"
     MONGO_DB_NAME: str = "fraud_proof_pdf"
@@ -24,7 +25,15 @@ class Settings(BaseSettings):
     )
 
     JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FREE_USAGE_LIMIT: int = 2
+    ADMIN_API_KEY: str
+    DEFAULT_ADMIN_EMAIL: str | None = None
+    DEFAULT_ADMIN_PASSWORD: str | None = None
+    DEFAULT_ADMIN_NAME: str = "PDFCraft Admin"
+    PDF_STORAGE_DIR: str = "storage/generated_pdfs"
 
     model_config = SettingsConfigDict(
         env_file=".env",
