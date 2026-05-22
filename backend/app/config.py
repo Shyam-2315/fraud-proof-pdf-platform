@@ -29,6 +29,8 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             "http://localhost:3025",
             "http://127.0.0.1:3025",
+            "http://localhost:3035",
+            "http://127.0.0.1:3035",
         ]
     )
 

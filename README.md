@@ -4,9 +4,16 @@
 
 **Fraud Proof PDF Platform** is the internal backend and admin monitoring system. Visitor matching, fraud events, risk scoring, blocked attempts, and investigation tools are internal-only and protected.
 
+## Folders
+
+- `frontend/`: customer-facing PDFCraft website
+- `pdfcraft-guardian-main/`: internal admin dashboard frontend
+- `backend/`: FastAPI API, admin APIs, and fraud engine
+
 ## Current Completed Status
 
 - Customer app runs at http://localhost:3025
+- Internal admin dashboard runs at http://localhost:3035/admin/login
 - Backend runs at http://localhost:8025
 - MongoDB host port is `27225`
 - Redis host port is `6385`
@@ -31,6 +38,7 @@ docker exec -it fraud-pdf-backend python scripts/generate_synthetic_fraud_datase
 docker exec -it fraud-pdf-backend python scripts/train_fraud_models.py --synthetic-csv data/synthetic_fraud_dataset.csv --auto-activate=false
 docker exec -it fraud-pdf-backend python -m pytest
 docker exec -it fraud-pdf-frontend npm run build
+docker exec -it fraud-pdf-admin-frontend npm run build
 ```
 
 Production deployment readiness is documented in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
@@ -53,7 +61,8 @@ Phase 5 adds:
 
 ## Architecture
 
-- Frontend: React + Vite + TypeScript + Tailwind
+- Customer frontend: React + Vite + TypeScript + Tailwind in `frontend/`
+- Admin frontend: React + Vite + TypeScript + Tailwind in `pdfcraft-guardian-main/`
 - Backend: FastAPI
 - Database: MongoDB
 - Cache/rate limit: Redis
@@ -65,6 +74,7 @@ Phase 5 adds:
 | Service | Host Port | Container Port |
 | --- | ---: | ---: |
 | Frontend | `3025` | `3025` |
+| Admin frontend | `3035` | `3035` |
 | Backend | `8025` | `8025` |
 | MongoDB | `27225` | `27017` |
 | Redis | `6385` | `6379` |
@@ -104,6 +114,14 @@ VITE_APP_NAME=PDFCraft
 VITE_APP_ENV=development
 ```
 
+Admin frontend `pdfcraft-guardian-main/.env`:
+
+```bash
+VITE_API_BASE_URL=http://localhost:8025
+VITE_APP_NAME=PDFCraft Internal Admin
+VITE_APP_ENV=development
+```
+
 Production examples are available at:
 
 - `backend/.env.production.example`
@@ -120,11 +138,12 @@ Vite reads `VITE_*` values at build time, so set `VITE_API_BASE_URL` before buil
 URLs:
 
 - Customer app: http://localhost:3025
+- Admin app: http://localhost:3035/admin/login
+- Backend: http://localhost:8025
 - Swagger: http://localhost:8025/docs
 - Backend health: http://localhost:8025/health
 - Backend live: http://localhost:8025/live
 - Backend ready: http://localhost:8025/ready
-- Admin login: http://localhost:3025/admin/login
 
 Stop:
 
@@ -233,9 +252,15 @@ For local development, the default admin is created only when these are configur
 
 Admin flow:
 
-1. Open http://localhost:3025/admin/login manually.
-2. Log in with admin email/password or use the API key fallback.
+1. Open http://localhost:3035/admin/login manually.
+2. Log in with admin email/password if configured, or use the API key fallback.
 3. View dashboard, events, visitors, investigation timelines, PDFs, and audit logs.
+
+For local demo API-key login, use the backend `ADMIN_API_KEY` value. The default from `backend/.env.example` is:
+
+```bash
+change-me-admin-key
+```
 
 Admin API key check:
 
@@ -324,7 +349,9 @@ Admin UI:
 ## Deployment Checklist
 
 - Local dev remains on ports `8025`, `3025`, `27225`, and `6385`.
+- Local admin dev uses port `3035`.
 - Production uses `docker-compose.prod.yml` behind Nginx.
+- Production admin routing is configured as a separate internal subdomain: `admin.your-domain.com`.
 - Validate production env with `python3 scripts/check_production_env.py --env backend/.env.production`.
 - Validate production Compose with `docker compose -f docker-compose.prod.yml config`.
 - Deploy with `./deploy-prod.sh` after replacing placeholders.
@@ -437,11 +464,13 @@ curl http://localhost:8025/live
 curl http://localhost:8025/ready
 curl http://localhost:8025/api/public/config
 curl -I http://localhost:3025
+curl -I http://localhost:3035
 docker exec -it fraud-pdf-backend python scripts/generate_synthetic_fraud_dataset.py
 docker exec -it fraud-pdf-backend python scripts/train_fraud_models.py --synthetic-csv data/synthetic_fraud_dataset.csv --auto-activate=false
 docker exec -it fraud-pdf-backend python scripts/demo_fraud_scenarios.py
 docker exec -it fraud-pdf-backend python -m pytest
 docker exec -it fraud-pdf-frontend npm run build
+docker exec -it fraud-pdf-admin-frontend npm run build
 ./stop.sh
 ```
 

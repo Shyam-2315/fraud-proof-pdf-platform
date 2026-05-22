@@ -4,14 +4,18 @@
 
 ```mermaid
 flowchart TB
-  Browser[Customer/Admin browser] --> Frontend[React/Vite frontend :3025]
-  Frontend --> Backend[FastAPI backend :8025]
+  Customer[Customer Frontend on 3025] --> Backend[Backend 8025]
+  Admin[Admin Frontend on 3035] --> Backend
   Backend --> Mongo[(MongoDB :27225)]
   Backend --> Redis[(Redis :6385)]
   Backend --> Files[Generated PDF storage]
   Backend --> Engine[Internal fraud engine]
   Engine --> Models[Model artifacts]
 ```
+
+The backend is the single source of truth. The customer-facing PDFCraft app in
+`frontend/` and the internal admin dashboard in `pdfcraft-guardian-main/` are
+separate frontends that both call the same FastAPI backend on port `8025`.
 
 ## Backend Module Structure
 
@@ -24,11 +28,10 @@ flowchart TB
 
 ## Frontend Module Structure
 
-- `src/pages`: customer and admin routes
-- `src/components`: shared UI, customer widgets, admin navigation
-- `src/api`: customer/admin API clients
-- `src/context`: auth state
-- `src/utils`: customer identity helpers
+- `frontend/`: customer-facing PDFCraft app on port `3025`
+- `pdfcraft-guardian-main/`: internal admin dashboard on port `3035`
+- Both frontends use `VITE_API_BASE_URL` to call the backend on port `8025`
+- Customer UI must not link to admin routes or expose internal fraud/ML details
 
 ## Data Collections
 
@@ -89,12 +92,12 @@ flowchart TD
 
 ## Deployment Architecture
 
-Docker Compose starts four services on fixed project ports:
+Docker Compose starts five services on fixed project ports:
 
 - Backend: `8025`
-- Frontend: `3025`
+- Customer frontend: `3025`
+- Admin frontend: `3035`
 - MongoDB host: `27225`
 - Redis host: `6385`
 
 The project intentionally avoids common ports like `3000`, `8000`, `8010`, `5432`, `6379`, and `27017`.
-

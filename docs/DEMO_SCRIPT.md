@@ -20,7 +20,7 @@
 
 ## Admin Demo
 
-1. Open http://localhost:3025/admin/login.
+1. Open http://localhost:3035/admin/login.
 2. Log in using admin account or API key.
 3. Show dashboard.
 4. Show fraud events.
@@ -61,4 +61,3 @@ docker exec -it fraud-pdf-backend python scripts/final_demo_check.py
 ## Talk Track
 
 Start with the customer value: simple PDF generation. Then show the business rule: two anonymous PDFs, then login. After login, show account monthly limits and downloads. Finally, move to admin and explain that fraud/ML details are intentionally internal-only.
-

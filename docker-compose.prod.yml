@@ -12,6 +12,8 @@ services:
     depends_on:
       frontend:
         condition: service_healthy
+      admin-frontend:
+        condition: service_healthy
       backend:
         condition: service_healthy
     networks:
@@ -65,6 +67,25 @@ services:
       - fraud_pdf_prod_network
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/health >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  admin-frontend:
+    build:
+      context: ./pdfcraft-guardian-main
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${ADMIN_VITE_API_BASE_URL:-https://api.your-domain.com}
+        VITE_APP_NAME: ${ADMIN_VITE_APP_NAME:-PDFCraft Internal Admin}
+        VITE_APP_ENV: ${ADMIN_VITE_APP_ENV:-production}
+    container_name: fraud-pdf-admin-frontend
+    networks:
+      - fraud_pdf_prod_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3035/admin/login >/dev/null 2>&1 || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
