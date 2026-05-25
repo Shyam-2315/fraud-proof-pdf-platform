@@ -44,6 +44,21 @@ def test_production_with_trusted_proxy_uses_forwarded_for(monkeypatch) -> None:
     assert get_client_ip(request) == "198.51.100.30"
 
 
+def test_x_real_ip_is_used_when_forwarded_for_is_missing(monkeypatch) -> None:
+    _set_env(
+        monkeypatch,
+        APP_ENV="production",
+        TRUST_PROXY_HEADERS="true",
+        TRUSTED_PROXY_IPS="172.25.0.0/16",
+    )
+    request = _request(
+        client_host="172.25.0.5",
+        headers={"X-Real-IP": "198.51.100.31"},
+    )
+
+    assert get_client_ip(request) == "198.51.100.31"
+
+
 def test_fallback_works_when_request_client_is_missing(monkeypatch) -> None:
     _set_env(monkeypatch, APP_ENV="production", TRUST_PROXY_HEADERS="false")
     request = _request(client_host=None, headers={})

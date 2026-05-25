@@ -66,25 +66,7 @@ export default function GeneratePage() {
       await sendBehaviorEvent("PDF_GENERATED", { pdf_id: result.pdf_id, content: values.content });
       setMessage(result.message || "PDF generated successfully.");
       if (result.pdf_id) setLastPdf({ pdf_id: result.pdf_id, file_name: result.file_name });
-      if (
-        typeof result.free_usage_count === "number" &&
-        typeof result.free_usage_limit === "number" &&
-        typeof result.remaining_free_uses === "number"
-      ) {
-        setStatus((currentStatus) => ({
-          visitor_id: currentStatus?.visitor_id || "",
-          free_usage_count: result.free_usage_count!,
-          free_usage_limit: result.free_usage_limit!,
-          remaining_free_uses: result.remaining_free_uses!,
-          is_blocked: false,
-          message: result.remaining_free_uses! <= 0
-            ? "Free limit reached. Please log in to continue."
-            : `You have ${result.remaining_free_uses} free PDF generation${result.remaining_free_uses === 1 ? "" : "s"} remaining.`,
-          requires_login: result.remaining_free_uses! <= 0,
-        }));
-      } else {
-        await refreshStatus();
-      }
+      await refreshStatus();
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         const body = err.body as Partial<GeneratePdfResponse>;

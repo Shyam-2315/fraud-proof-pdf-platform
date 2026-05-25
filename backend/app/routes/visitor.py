@@ -13,6 +13,7 @@ from app.schemas.visitor import (
 from app.services.anonymous_usage_service import AnonymousUsageService
 from app.services.visitor_service import VisitorService
 from app.services.rate_limit_service import RateLimitService, client_ip
+from app.utils.request_utils import get_normalized_client_ip
 
 router = APIRouter(prefix="/api/visitor", tags=["Visitor"])
 visitor_service = VisitorService()
@@ -73,16 +74,15 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
 
     usage_summary = await anonymous_usage_service.build_shared_usage_summary(
         visitor=visitor,
-        ip_address=client_ip(request),
+        ip_address=get_normalized_client_ip(request),
     )
-    requires_login = (
-        bool(visitor.get("is_blocked", False))
-        or usage_summary["remaining_free_uses"] <= 0
-    )
+    shared_limit_reached = usage_summary["remaining_free_uses"] <= 0
+    is_blocked = bool(visitor.get("is_blocked", False)) or shared_limit_reached
+    requires_login = is_blocked
     return VisitorStatusResponse(
         visitor_id=visitor["_id"],
         **usage_summary,
-        is_blocked=bool(visitor.get("is_blocked", False)),
+        is_blocked=is_blocked,
         message=(
             LOGIN_REQUIRED_MESSAGE
             if requires_login

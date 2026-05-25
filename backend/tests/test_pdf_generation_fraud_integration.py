@@ -279,8 +279,8 @@ def test_shared_ip_status_syncs_across_new_visitors() -> None:
 def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() -> None:
     ip_address = "203.0.113.51"
     chrome_prefix = f"shared-limit-a-{uuid4()}"
-    safari_prefix = f"shared-limit-b-{uuid4()}"
-    incognito_prefix = f"shared-limit-c-{uuid4()}"
+    incognito_prefix = f"shared-limit-b-{uuid4()}"
+    safari_prefix = f"shared-limit-c-{uuid4()}"
 
     with httpx.Client(
         base_url=BASE_URL,
@@ -299,31 +299,14 @@ def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() 
             session_id=f"{chrome_prefix}-session",
             fingerprint_hash=f"{chrome_prefix}-fingerprint",
         )
-        assert _generate(chrome, "Shared limit first").status_code == 200
-
-    with httpx.Client(
-        base_url=BASE_URL,
-        timeout=10.0,
-        headers=_identity_headers(
-            ip_address,
-            f"{safari_prefix}-local",
-            f"{safari_prefix}-session",
-            f"{safari_prefix}-fingerprint",
-        ),
-    ) as safari:
-        _identify(
-            safari,
-            safari_prefix,
-            local_storage_id=f"{safari_prefix}-local",
-            session_id=f"{safari_prefix}-session",
-            fingerprint_hash=f"{safari_prefix}-fingerprint",
-        )
-        second_generate = _generate(safari, "Shared limit second")
+        first_generate = _generate(chrome, "Shared limit first")
+        assert first_generate.status_code == 200, first_generate.text
+        second_generate = _generate(chrome, "Shared limit second")
         assert second_generate.status_code == 200, second_generate.text
-        body = second_generate.json()
-        _assert_customer_safe(body)
-        assert body["free_usage_count"] == 2
-        assert body["remaining_free_uses"] == 0
+        chrome_body = second_generate.json()
+        _assert_customer_safe(chrome_body)
+        assert chrome_body["free_usage_count"] == 2
+        assert chrome_body["remaining_free_uses"] == 0
 
     with httpx.Client(
         base_url=BASE_URL,
@@ -348,6 +331,33 @@ def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() 
         _assert_customer_safe(body)
         assert body["free_usage_count"] == 2
         assert body["remaining_free_uses"] == 0
+        assert body["is_blocked"] is True
+        assert body["requires_login"] is True
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{safari_prefix}-local",
+            f"{safari_prefix}-session",
+            f"{safari_prefix}-fingerprint",
+        ),
+    ) as safari:
+        _identify(
+            safari,
+            safari_prefix,
+            local_storage_id=f"{safari_prefix}-local",
+            session_id=f"{safari_prefix}-session",
+            fingerprint_hash=f"{safari_prefix}-fingerprint",
+        )
+        status_response = safari.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        body = status_response.json()
+        _assert_customer_safe(body)
+        assert body["free_usage_count"] == 2
+        assert body["remaining_free_uses"] == 0
+        assert body["is_blocked"] is True
         assert body["requires_login"] is True
 
 

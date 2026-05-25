@@ -32,6 +32,7 @@ from app.services.fraud_service import FraudService
 from app.services.rate_limit_service import client_ip
 from app.services.user_usage_service import UserUsageService
 from app.services.visitor_service import VisitorService
+from app.utils.request_utils import get_normalized_client_ip
 from app.utils.pdf_generator import generate_simple_pdf
 from app.utils.security import generate_uuid, normalize_ip, utc_now
 
@@ -93,12 +94,14 @@ class PDFService:
         payload: PDFGenerateRequest,
     ) -> PDFGenerateResponse:
         visitor = await self._get_visitor_from_request(request)
-        ip_address = normalize_ip(client_ip(request))
+        ip_address = get_normalized_client_ip(request)
         shared_usage_summary = await self.anonymous_usage_service.build_shared_usage_summary(
             visitor=visitor,
             ip_address=ip_address,
         )
-        if shared_usage_summary["free_usage_count"] >= shared_usage_summary["free_usage_limit"]:
+        shared_used = shared_usage_summary["free_usage_count"]
+        shared_limit = shared_usage_summary["free_usage_limit"]
+        if shared_used >= shared_limit:
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
                 user_id=None,
@@ -126,7 +129,7 @@ class PDFService:
             metadata=decision,
         )
         if decision["decision"] == "REQUIRE_LOGIN":
-            free_limit_reached = int(visitor.get("free_usage_count", 0)) >= self.settings.FREE_USAGE_LIMIT
+            free_limit_reached = shared_used >= shared_limit
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
                 user_id=None,
@@ -225,8 +228,7 @@ class PDFService:
                 ),
             )
 
-        free_usage_count = int(visitor.get("free_usage_count", 0))
-        if free_usage_count >= self.settings.FREE_USAGE_LIMIT:
+        if shared_used >= shared_limit:
             await self.fraud_event_service.create_from_request(
                 request=request,
                 visitor=visitor,
@@ -246,8 +248,8 @@ class PDFService:
                 allowed=False,
                 reason="FREE_LIMIT_REACHED",
                 metadata={
-                    "free_usage_count": free_usage_count,
-                    "free_usage_limit": self.settings.FREE_USAGE_LIMIT,
+                    "free_usage_count": shared_used,
+                    "free_usage_limit": shared_limit,
                 },
             )
             await self._create_pdf_fraud_event(
@@ -278,8 +280,8 @@ class PDFService:
                 allowed=False,
                 reason="FREE_LIMIT_REACHED",
                 metadata={
-                    "free_usage_count": free_usage_count,
-                    "free_usage_limit": self.settings.FREE_USAGE_LIMIT,
+                    "free_usage_count": shared_used,
+                    "free_usage_limit": shared_limit,
                 },
             )
             raise HTTPException(

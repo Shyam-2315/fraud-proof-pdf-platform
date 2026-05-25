@@ -3,6 +3,7 @@ from ipaddress import ip_address, ip_network
 from fastapi import Request
 
 from app.config import get_settings
+from app.utils.security import normalize_ip
 
 
 def get_client_ip(request: Request) -> str:
@@ -23,6 +24,10 @@ def get_client_ip(request: Request) -> str:
         return _first_forwarded_ip(request) or direct_ip
 
     return direct_ip
+
+
+def get_normalized_client_ip(request: Request) -> str:
+    return normalize_ip(get_client_ip(request))
 
 
 def _direct_client_ip(request: Request) -> str:
