@@ -24,6 +24,9 @@ export type GeneratePdfResponse = {
   title?: string;
   file_name?: string;
   free_limit?: number;
+  free_usage_count?: number;
+  free_usage_limit?: number;
+  remaining_free_uses?: number;
   plan?: string;
   limit?: number;
   used?: number;
@@ -51,6 +54,10 @@ export function getPublicConfig() {
 
 export function identifyVisitor() {
   return identifyRequest<{ success: boolean; visitor_id: string; message: string }>();
+}
+
+export function ensureVisitorIdentified() {
+  return identifyVisitor();
 }
 
 export function getVisitorStatus() {

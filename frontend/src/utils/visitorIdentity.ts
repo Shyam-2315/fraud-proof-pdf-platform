@@ -60,6 +60,7 @@ export async function getVisitorIdentity(): Promise<VisitorIdentity> {
 export async function getIdentityHeaders(): Promise<Record<string, string>> {
   const identity = await getVisitorIdentity();
   return {
+    "X-Anon-Id": identity.localStorageId,
     "X-Device-Fingerprint": identity.fingerprintHash,
     "X-Visitor-Id": identity.localStorageId,
     "X-Session-Id": identity.sessionId,

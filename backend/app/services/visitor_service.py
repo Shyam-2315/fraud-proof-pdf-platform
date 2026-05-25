@@ -400,6 +400,43 @@ class VisitorService:
 
         return final_visitor, False, cookie_id
 
+    async def find_visitor_from_request(self, request: Request) -> dict[str, Any] | None:
+        cookie_id = get_visitor_cookie(request.cookies)
+        anon_id = request.headers.get("X-Anon-Id")
+        local_storage_id = request.headers.get("X-Visitor-Id")
+        fingerprint_hash = request.headers.get("X-Device-Fingerprint")
+        session_id = request.headers.get("X-Session-Id")
+
+        if cookie_id:
+            visitor = await self.repository.find_by_cookie_id(cookie_id)
+            if visitor is not None:
+                return visitor
+
+        if anon_id:
+            visitor = await self.repository.find_by_cookie_id(anon_id)
+            if visitor is not None:
+                return visitor
+            visitor = await self.repository.find_by_local_storage_id(anon_id)
+            if visitor is not None:
+                return visitor
+
+        if local_storage_id:
+            visitor = await self.repository.find_by_local_storage_id(local_storage_id)
+            if visitor is not None:
+                return visitor
+
+        if fingerprint_hash:
+            visitor = await self.repository.find_by_fingerprint_hash(fingerprint_hash)
+            if visitor is not None:
+                return visitor
+
+        if session_id:
+            visitor = await self.repository.find_by_session_id(session_id)
+            if visitor is not None:
+                return visitor
+
+        return None
+
     async def _create_identity_link(
         self,
         request: Request,

@@ -15,6 +15,9 @@ class PDFGenerateResponse(BaseModel):
     title: str | None = None
     file_name: str | None = None
     free_limit: int | None = None
+    free_usage_count: int | None = None
+    free_usage_limit: int | None = None
+    remaining_free_uses: int | None = None
     plan: str | None = None
     limit: int | None = None
     used: int

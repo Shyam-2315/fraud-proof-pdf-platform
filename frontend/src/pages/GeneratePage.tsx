@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { API_BASE_URL, getAccessToken } from "../api/client";
-import { generatePdf, getVisitorStatus, identifyVisitor, sendBehaviorEvent, type GeneratePdfResponse, type VisitorStatus } from "../api/userApi";
+import { ensureVisitorIdentified, generatePdf, getVisitorStatus, sendBehaviorEvent, type GeneratePdfResponse, type VisitorStatus } from "../api/userApi";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
 import LoadingState from "../components/LoadingState";
@@ -21,18 +21,32 @@ export default function GeneratePage() {
   const [generating, setGenerating] = useState(false);
 
   async function refreshStatus() {
-    const nextStatus = await getVisitorStatus();
-    setStatus(nextStatus);
+    try {
+      const nextStatus = await getVisitorStatus();
+      setStatus(nextStatus);
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
+        await ensureVisitorIdentified();
+        const nextStatus = await getVisitorStatus();
+        setStatus(nextStatus);
+        return;
+      }
+      throw err;
+    }
   }
 
   useEffect(() => {
     async function load() {
       try {
-        await identifyVisitor();
+        await ensureVisitorIdentified();
         await sendBehaviorEvent("PAGE_VIEW", { page: "generate" });
         await refreshStatus();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load usage.");
+        if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
+          setError("We could not start your session. Please refresh and try again.");
+        } else {
+          setError(err instanceof Error ? err.message : "Unable to load usage.");
+        }
       } finally {
         setLoading(false);
       }
@@ -52,7 +66,25 @@ export default function GeneratePage() {
       await sendBehaviorEvent("PDF_GENERATED", { pdf_id: result.pdf_id, content: values.content });
       setMessage(result.message || "PDF generated successfully.");
       if (result.pdf_id) setLastPdf({ pdf_id: result.pdf_id, file_name: result.file_name });
-      await refreshStatus();
+      if (
+        typeof result.free_usage_count === "number" &&
+        typeof result.free_usage_limit === "number" &&
+        typeof result.remaining_free_uses === "number"
+      ) {
+        setStatus((currentStatus) => ({
+          visitor_id: currentStatus?.visitor_id || "",
+          free_usage_count: result.free_usage_count!,
+          free_usage_limit: result.free_usage_limit!,
+          remaining_free_uses: result.remaining_free_uses!,
+          is_blocked: false,
+          message: result.remaining_free_uses! <= 0
+            ? "Free limit reached. Please log in to continue."
+            : `You have ${result.remaining_free_uses} free PDF generation${result.remaining_free_uses === 1 ? "" : "s"} remaining.`,
+          requires_login: result.remaining_free_uses! <= 0,
+        }));
+      } else {
+        await refreshStatus();
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         const body = err.body as Partial<GeneratePdfResponse>;

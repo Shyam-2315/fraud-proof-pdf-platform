@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getMyPdfHistory, identifyVisitor, type PdfHistory } from "../api/userApi";
+import { ensureVisitorIdentified, getMyPdfHistory, type PdfHistory } from "../api/userApi";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
 import LoadingState from "../components/LoadingState";
@@ -14,7 +14,7 @@ export default function HistoryPage() {
   useEffect(() => {
     async function load() {
       try {
-        await identifyVisitor();
+        await ensureVisitorIdentified();
         setHistory(await getMyPdfHistory());
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load PDFs.");

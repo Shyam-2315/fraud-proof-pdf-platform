@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
+import { ApiError } from "../api/client";
 import { getAccountUsage, type AccountUsage } from "../api/authApi";
-import { getVisitorStatus, identifyVisitor, type VisitorStatus } from "../api/userApi";
+import { ensureVisitorIdentified, getVisitorStatus, type VisitorStatus } from "../api/userApi";
 import AccountUsageCard from "../components/AccountUsageCard";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
@@ -22,8 +23,17 @@ export default function UsagePage() {
         if (isAuthenticated) {
           setAccountUsage(await getAccountUsage());
         } else {
-          await identifyVisitor();
-          setStatus(await getVisitorStatus());
+          await ensureVisitorIdentified();
+          try {
+            setStatus(await getVisitorStatus());
+          } catch (err) {
+            if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
+              await ensureVisitorIdentified();
+              setStatus(await getVisitorStatus());
+            } else {
+              throw err;
+            }
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Unable to load usage.");

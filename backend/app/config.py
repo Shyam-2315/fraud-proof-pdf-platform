@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     FREE_USAGE_LIMIT: int = 2
+    ENABLE_SHARED_IP_ANON_QUOTA: bool = True
+    ANON_SHARED_IP_FREE_LIMIT: int = 2
+    ANON_IP_USAGE_WINDOW_HOURS: int = 24
     ADMIN_API_KEY: str = "change-me-admin-key"
     DEFAULT_ADMIN_EMAIL: str | None = "admin@pdfcraft.local"
     DEFAULT_ADMIN_PASSWORD: str | None = "AdminPassword123"

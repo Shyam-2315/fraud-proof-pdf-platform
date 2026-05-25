@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.core.middleware import LoggingMiddleware, RequestIDMiddleware, SecurityHeadersMiddleware
 from app.database import close_mongo_connection, connect_to_mongo
 from app.repositories.admin_audit_repository import ensure_admin_audit_indexes
+from app.repositories.anonymous_ip_usage_repository import ensure_anonymous_ip_usage_indexes
 from app.repositories.fraud_event_repository import ensure_fraud_event_indexes
 from app.repositories.fraud_engine_repository import ensure_fraud_engine_indexes
 from app.repositories.fraud_repository import ensure_fraud_indexes
@@ -82,6 +83,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         await connect_to_mongo()
         await ensure_visitor_indexes()
+        await ensure_anonymous_ip_usage_indexes()
         await ensure_pdf_indexes()
         await ensure_user_indexes()
         await ensure_refresh_token_indexes()

@@ -39,6 +39,23 @@ def _headers(ip_suffix: int, user_agent: str | None = None) -> dict[str, str]:
     }
 
 
+def _identity_headers(
+    ip_address: str,
+    visitor_id: str,
+    session_id: str,
+    fingerprint_hash: str,
+    user_agent: str | None = None,
+) -> dict[str, str]:
+    return {
+        "X-Forwarded-For": ip_address,
+        "User-Agent": user_agent or f"PDFCraftTest/{uuid4()}",
+        "X-Anon-Id": visitor_id,
+        "X-Visitor-Id": visitor_id,
+        "X-Session-Id": session_id,
+        "X-Device-Fingerprint": fingerprint_hash,
+    }
+
+
 def _payload(
     prefix: str,
     *,
@@ -105,6 +122,8 @@ def test_anonymous_first_and_second_pdfs_allowed_and_download_works() -> None:
         _assert_customer_safe(first_body)
         assert first_body["used"] == 1
         assert first_body["remaining"] == 1
+        assert first_body["free_usage_count"] == 1
+        assert first_body["remaining_free_uses"] == 1
         assert first_body["pdf_id"]
 
         second = _generate(client, "Anon second")
@@ -113,6 +132,8 @@ def test_anonymous_first_and_second_pdfs_allowed_and_download_works() -> None:
         _assert_customer_safe(second_body)
         assert second_body["used"] == 2
         assert second_body["remaining"] == 0
+        assert second_body["free_usage_count"] == 2
+        assert second_body["remaining_free_uses"] == 0
 
         download = client.get(f"/api/pdf/download/{second_body['pdf_id']}")
         assert download.status_code == 200
@@ -200,6 +221,217 @@ def test_same_ip_only_does_not_merge_different_users() -> None:
     assert first_identify["visitor_id"] != second_identify["visitor_id"]
     assert first_status.json()["remaining_free_uses"] == 2
     assert second_status.json()["remaining_free_uses"] == 2
+
+
+def test_shared_ip_status_syncs_across_new_visitors() -> None:
+    ip_address = "203.0.113.50"
+    first_prefix = f"shared-ip-a-{uuid4()}"
+    second_prefix = f"shared-ip-b-{uuid4()}"
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{first_prefix}-local",
+            f"{first_prefix}-session",
+            f"{first_prefix}-fingerprint",
+        ),
+    ) as first:
+        _identify(
+            first,
+            first_prefix,
+            local_storage_id=f"{first_prefix}-local",
+            session_id=f"{first_prefix}-session",
+            fingerprint_hash=f"{first_prefix}-fingerprint",
+        )
+        first_generate = _generate(first, "Shared IP first")
+        assert first_generate.status_code == 200, first_generate.text
+        assert first_generate.json()["free_usage_count"] == 1
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{second_prefix}-local",
+            f"{second_prefix}-session",
+            f"{second_prefix}-fingerprint",
+        ),
+    ) as second:
+        _identify(
+            second,
+            second_prefix,
+            local_storage_id=f"{second_prefix}-local",
+            session_id=f"{second_prefix}-session",
+            fingerprint_hash=f"{second_prefix}-fingerprint",
+        )
+        status_response = second.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        body = status_response.json()
+        _assert_customer_safe(body)
+        assert body["free_usage_count"] == 1
+        assert body["free_usage_limit"] == 2
+        assert body["remaining_free_uses"] == 1
+        assert body["requires_login"] is False
+
+
+def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() -> None:
+    ip_address = "203.0.113.51"
+    chrome_prefix = f"shared-limit-a-{uuid4()}"
+    safari_prefix = f"shared-limit-b-{uuid4()}"
+    incognito_prefix = f"shared-limit-c-{uuid4()}"
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{chrome_prefix}-local",
+            f"{chrome_prefix}-session",
+            f"{chrome_prefix}-fingerprint",
+        ),
+    ) as chrome:
+        _identify(
+            chrome,
+            chrome_prefix,
+            local_storage_id=f"{chrome_prefix}-local",
+            session_id=f"{chrome_prefix}-session",
+            fingerprint_hash=f"{chrome_prefix}-fingerprint",
+        )
+        assert _generate(chrome, "Shared limit first").status_code == 200
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{safari_prefix}-local",
+            f"{safari_prefix}-session",
+            f"{safari_prefix}-fingerprint",
+        ),
+    ) as safari:
+        _identify(
+            safari,
+            safari_prefix,
+            local_storage_id=f"{safari_prefix}-local",
+            session_id=f"{safari_prefix}-session",
+            fingerprint_hash=f"{safari_prefix}-fingerprint",
+        )
+        second_generate = _generate(safari, "Shared limit second")
+        assert second_generate.status_code == 200, second_generate.text
+        body = second_generate.json()
+        _assert_customer_safe(body)
+        assert body["free_usage_count"] == 2
+        assert body["remaining_free_uses"] == 0
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{incognito_prefix}-local",
+            f"{incognito_prefix}-session",
+            f"{incognito_prefix}-fingerprint",
+        ),
+    ) as incognito:
+        _identify(
+            incognito,
+            incognito_prefix,
+            local_storage_id=f"{incognito_prefix}-local",
+            session_id=f"{incognito_prefix}-session",
+            fingerprint_hash=f"{incognito_prefix}-fingerprint",
+        )
+        status_response = incognito.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        body = status_response.json()
+        _assert_customer_safe(body)
+        assert body["free_usage_count"] == 2
+        assert body["remaining_free_uses"] == 0
+        assert body["requires_login"] is True
+
+
+def test_shared_ip_third_new_visitor_is_blocked() -> None:
+    ip_address = "203.0.113.52"
+    prefixes = [f"shared-block-{uuid4()}-{index}" for index in range(3)]
+
+    for index, prefix in enumerate(prefixes):
+        with httpx.Client(
+            base_url=BASE_URL,
+            timeout=10.0,
+            headers=_identity_headers(
+                ip_address,
+                f"{prefix}-local",
+                f"{prefix}-session",
+                f"{prefix}-fingerprint",
+            ),
+        ) as client:
+            _identify(
+                client,
+                prefix,
+                local_storage_id=f"{prefix}-local",
+                session_id=f"{prefix}-session",
+                fingerprint_hash=f"{prefix}-fingerprint",
+            )
+            response = _generate(client, f"Shared blocked {index}")
+            if index < 2:
+                assert response.status_code == 200, response.text
+            else:
+                assert response.status_code == 403
+                assert response.json() == {
+                    "success": False,
+                    "message": "Free limit reached. Please log in to continue.",
+                    "requires_login": True,
+                }
+                _assert_customer_safe(response.json())
+
+
+def test_different_ip_gets_separate_shared_quota() -> None:
+    first_prefix = f"separate-ip-a-{uuid4()}"
+    second_prefix = f"separate-ip-b-{uuid4()}"
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            "203.0.113.60",
+            f"{first_prefix}-local",
+            f"{first_prefix}-session",
+            f"{first_prefix}-fingerprint",
+        ),
+    ) as first:
+        _identify(
+            first,
+            first_prefix,
+            local_storage_id=f"{first_prefix}-local",
+            session_id=f"{first_prefix}-session",
+            fingerprint_hash=f"{first_prefix}-fingerprint",
+        )
+        assert _generate(first, "Separate IP first").status_code == 200
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            "203.0.113.61",
+            f"{second_prefix}-local",
+            f"{second_prefix}-session",
+            f"{second_prefix}-fingerprint",
+        ),
+    ) as second:
+        _identify(
+            second,
+            second_prefix,
+            local_storage_id=f"{second_prefix}-local",
+            session_id=f"{second_prefix}-session",
+            fingerprint_hash=f"{second_prefix}-fingerprint",
+        )
+        status_response = second.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        body = status_response.json()
+        _assert_customer_safe(body)
+        assert body["free_usage_count"] == 0
+        assert body["remaining_free_uses"] == 2
 
 
 def test_logged_in_user_can_generate_after_anonymous_block() -> None:

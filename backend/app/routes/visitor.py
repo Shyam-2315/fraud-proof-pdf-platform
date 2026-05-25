@@ -4,21 +4,20 @@ from app.core.public_config import (
     CUSTOMER_COOKIE_NAME,
     LOGIN_REQUIRED_MESSAGE,
     customer_cookie_options,
-    get_visitor_cookie,
 )
-from app.repositories.visitor_repository import VisitorRepository
 from app.schemas.visitor import (
     VisitorIdentifyRequest,
     VisitorIdentifyResponse,
     VisitorStatusResponse,
 )
-from app.services.visitor_service import VisitorService, build_usage_summary
+from app.services.anonymous_usage_service import AnonymousUsageService
+from app.services.visitor_service import VisitorService
 from app.services.rate_limit_service import RateLimitService, client_ip
 
 router = APIRouter(prefix="/api/visitor", tags=["Visitor"])
 visitor_service = VisitorService()
-visitor_repository = VisitorRepository()
 rate_limit_service = RateLimitService()
+anonymous_usage_service = AnonymousUsageService()
 
 ANON_COOKIE_MAX_AGE = 60 * 60 * 24 * 30
 
@@ -65,21 +64,17 @@ async def identify_visitor(
 
 @router.get("/status", response_model=VisitorStatusResponse)
 async def visitor_status(request: Request) -> VisitorStatusResponse:
-    cookie_id = get_visitor_cookie(request.cookies)
-    if not cookie_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Visitor cookie not found. Please identify visitor first.",
-        )
-
-    visitor = await visitor_repository.find_by_cookie_id(cookie_id)
+    visitor = await visitor_service.find_visitor_from_request(request)
     if visitor is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Visitor not found.",
+            detail="Visitor not found. Please identify visitor first.",
         )
 
-    usage_summary = build_usage_summary(visitor)
+    usage_summary = await anonymous_usage_service.build_shared_usage_summary(
+        visitor=visitor,
+        ip_address=client_ip(request),
+    )
     requires_login = (
         bool(visitor.get("is_blocked", False))
         or usage_summary["remaining_free_uses"] <= 0
