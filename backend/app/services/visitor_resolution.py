@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import Request
@@ -7,6 +8,8 @@ from app.core.public_config import get_visitor_cookie
 from app.repositories.visitor_repository import VisitorRepository
 from app.utils.ip_utils import get_client_ip_details
 from app.utils.security import normalize_ip, safe_append_unique, utc_now
+
+logger = logging.getLogger(__name__)
 
 
 class VisitorResolutionService:
@@ -42,6 +45,16 @@ class VisitorResolutionService:
 
         visitor = await self._find_final_fallback(request_context)
         if visitor is None:
+            logger.info(
+                "Visitor resolution returned no match source_signals=%s",
+                {
+                    "has_anon_id": bool(request_context["anon_id"]),
+                    "has_visitor_id_header": bool(request_context["visitor_id_header"]),
+                    "has_session_id": bool(request_context["session_id"]),
+                    "has_fingerprint_hash": bool(request_context["fingerprint_hash"]),
+                    "ip_address": request_context["ip_address"],
+                },
+            )
             return None, request_context
         refreshed = await self._refresh_seen_signals(
             visitor=visitor,

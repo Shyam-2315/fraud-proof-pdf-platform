@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import timedelta
 from typing import Any
 
@@ -38,6 +39,8 @@ from app.services.visitor_service import VisitorService
 from app.utils.request_utils import get_client_ip_details, get_normalized_client_ip
 from app.utils.pdf_generator import generate_simple_pdf
 from app.utils.security import generate_uuid, normalize_ip, utc_now
+
+logger = logging.getLogger(__name__)
 
 
 class PDFService:
@@ -393,6 +396,13 @@ class PDFService:
         except HTTPException:
             raise
         except Exception as exc:
+            logger.exception(
+                "Anonymous PDF generation failed visitor_id=%s ip=%s has_anon_id=%s has_fingerprint=%s",
+                visitor.get("_id"),
+                ip_address,
+                bool(request.headers.get("X-Anon-Id") or get_visitor_cookie(request.cookies)),
+                bool(request.headers.get("X-Device-Fingerprint")),
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Unable to generate PDF. Please try again.",

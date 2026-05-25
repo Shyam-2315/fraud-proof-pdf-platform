@@ -2,6 +2,7 @@ import os
 from uuid import uuid4
 
 import httpx
+import pytest
 from pymongo import MongoClient
 
 from conftest import TEST_MONGO_DB_NAME, TEST_MONGO_URL
@@ -9,6 +10,13 @@ from conftest import TEST_MONGO_DB_NAME, TEST_MONGO_URL
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8025")
 RUN_IP_SEGMENT = uuid4().int % 200 + 1
+SHARED_TEST_IPS = [
+    "203.0.113.50",
+    "203.0.113.51",
+    "203.0.113.52",
+    "203.0.113.60",
+    "203.0.113.61",
+]
 
 CUSTOMER_FORBIDDEN = {
     "fraud",
@@ -32,6 +40,28 @@ CUSTOMER_FORBIDDEN = {
     "is_vpn",
     "is_proxy",
 }
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_shared_usage_state() -> None:
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+    run_segment_regex = rf"^198\.51\.{RUN_IP_SEGMENT}\."
+    visitor_filter = {
+        "$or": [
+            {"ip_addresses": {"$in": SHARED_TEST_IPS}},
+            {"ip_addresses": {"$regex": run_segment_regex}},
+        ]
+    }
+    db.anonymous_ip_usage.delete_many(
+        {
+            "$or": [
+                {"ip_address": {"$in": SHARED_TEST_IPS}},
+                {"ip_address": {"$regex": run_segment_regex}},
+            ]
+        }
+    )
+    db.visitors.delete_many(visitor_filter)
 
 
 def _email(prefix: str) -> str:

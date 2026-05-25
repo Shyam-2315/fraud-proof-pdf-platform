@@ -70,12 +70,12 @@ class AnonymousUsageService:
         visitor: dict[str, Any] | None,
         ip_address: str | None,
     ) -> dict[str, int]:
-        visitor_usage_count = int((visitor or {}).get("free_usage_count", 0))
+        visitor_usage_count = int((visitor or {}).get("free_usage_count") or 0)
         free_usage_limit = self.free_usage_limit()
         if not self.shared_ip_quota_enabled():
             shared_usage_count = visitor_usage_count
         else:
-            ip_usage_count = await self.get_ip_usage_count(ip_address)
+            ip_usage_count = await self.get_ip_usage_count(ip_address) if ip_address else 0
             shared_usage_count = max(visitor_usage_count, ip_usage_count)
         return {
             "free_usage_count": shared_usage_count,

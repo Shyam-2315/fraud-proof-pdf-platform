@@ -49,31 +49,35 @@ class AnonymousIPUsageRepository:
         }
         effective_window_start = active.get("window_start", window_start) if active else window_start
         effective_window_end = active.get("window_end", window_end) if active else window_end
+        add_to_set_fields: dict[str, Any] = {}
+        if visitor_id:
+            add_to_set_fields["visitor_ids"] = visitor_id
+        if anon_id:
+            add_to_set_fields["anon_ids"] = anon_id
+        if fingerprint_hash:
+            add_to_set_fields["fingerprint_hashes"] = fingerprint_hash
+        if user_agent:
+            add_to_set_fields["user_agents"] = user_agent
+
+        update_document: dict[str, Any] = {
+            "$inc": {"anonymous_pdf_count": 1},
+            "$setOnInsert": {
+                "ip_address": ip_address,
+                "window_start": effective_window_start,
+                "window_end": effective_window_end,
+                "first_seen_at": now,
+            },
+            "$set": {
+                "last_seen_at": now,
+                "updated_at": now,
+            },
+        }
+        if add_to_set_fields:
+            update_document["$addToSet"] = add_to_set_fields
+
         return await self.get_collection().find_one_and_update(
             selector,
-            {
-                "$inc": {"anonymous_pdf_count": 1},
-                "$set": {
-                    "ip_address": ip_address,
-                    "window_start": effective_window_start,
-                    "window_end": effective_window_end,
-                    "updated_at": now,
-                    "last_seen_at": now,
-                },
-                "$setOnInsert": {
-                    "first_seen_at": now,
-                    "visitor_ids": [],
-                    "anon_ids": [],
-                    "fingerprint_hashes": [],
-                    "user_agents": [],
-                },
-                "$addToSet": {
-                    "visitor_ids": {"$each": [value for value in [visitor_id] if value]},
-                    "anon_ids": {"$each": [value for value in [anon_id] if value]},
-                    "fingerprint_hashes": {"$each": [value for value in [fingerprint_hash] if value]},
-                    "user_agents": {"$each": [value for value in [user_agent] if value]},
-                },
-            },
+            update_document,
             upsert=True,
             return_document=ReturnDocument.AFTER,
         )

@@ -69,6 +69,7 @@ class Settings(BaseSettings):
     VISITOR_IDENTIFY_RATE_LIMIT: str = "30/minute"
     VISITOR_STATUS_RATE_LIMIT: str = "60/minute"
     PDF_GENERATE_RATE_LIMIT: str = "5/minute"
+    AUTHENTICATED_PDF_GENERATE_RATE_LIMIT: str = "60/minute"
     AUTH_LOGIN_RATE_LIMIT: str = "5/minute"
     AUTH_REGISTER_RATE_LIMIT: str = "3/hour"
     ADMIN_RATE_LIMIT: str = "120/minute"

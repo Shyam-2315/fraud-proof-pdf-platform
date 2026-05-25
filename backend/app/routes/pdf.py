@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.core.auth import get_current_user_optional
 from app.schemas.pdf import (
     MyPDFHistoryResponse,
     PDFGenerateRequest,
@@ -27,17 +28,23 @@ async def generate_pdf(
     payload: PDFGenerateRequest,
     request: Request,
 ) -> PDFGenerateResponse:
-    identifier = (
-        request.headers.get("authorization")
-        or request.headers.get("X-Visitor-Id")
-        or request.headers.get("X-Device-Fingerprint")
-        or client_ip(request)
-    )
+    current_user = await get_current_user_optional(request)
+    is_authenticated = current_user is not None
+    if is_authenticated:
+        identifier = request.headers.get("authorization") or current_user["_id"]
+        rate = pdf_service.settings.AUTHENTICATED_PDF_GENERATE_RATE_LIMIT
+    else:
+        identifier = (
+            request.headers.get("X-Visitor-Id")
+            or request.headers.get("X-Device-Fingerprint")
+            or client_ip(request)
+        )
+        rate = pdf_service.settings.PDF_GENERATE_RATE_LIMIT
     await rate_limit_service.check(
         request,
         bucket="pdf_generate",
         identifier=identifier,
-        rate=pdf_service.settings.PDF_GENERATE_RATE_LIMIT,
+        rate=rate,
     )
     try:
         return await pdf_service.generate_pdf(
