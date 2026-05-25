@@ -4,11 +4,11 @@ from typing import Any
 from fastapi import Request
 
 from app.core.auth import get_current_user_optional
-from app.core.public_config import get_visitor_cookie
 from app.models.behavior import BehaviorEventType
 from app.repositories.behavior_repository import BehaviorEventRepository
 from app.repositories.visitor_repository import VisitorRepository
 from app.schemas.behavior import BehaviorEventRequest
+from app.services.visitor_resolution import VisitorResolutionService
 from app.utils.security import generate_uuid, utc_now
 
 
@@ -20,6 +20,7 @@ class BehaviorService:
     ) -> None:
         self.repository = repository or BehaviorEventRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
+        self.visitor_resolution_service = VisitorResolutionService(repository=self.visitor_repository)
 
     async def record_event(
         self,
@@ -63,16 +64,8 @@ class BehaviorService:
         )
 
     async def _resolve_visitor(self, request: Request) -> dict[str, Any] | None:
-        cookie_id = get_visitor_cookie(request.cookies)
-        visitor = await self.visitor_repository.find_by_cookie_id(cookie_id)
-        if visitor is not None:
-            return visitor
-        local_storage_id = request.headers.get("x-visitor-id")
-        fingerprint_hash = request.headers.get("x-device-fingerprint")
-        return (
-            await self.visitor_repository.find_by_local_storage_id(local_storage_id)
-            or await self.visitor_repository.find_by_fingerprint_hash(fingerprint_hash)
-        )
+        visitor, _ = await self.visitor_resolution_service.resolve(request)
+        return visitor
 
 
 def content_hash(content: str | None) -> str | None:

@@ -25,6 +25,12 @@ CUSTOMER_FORBIDDEN = {
     "block_reason",
     "FREE_LIMIT_REACHED",
     "CRITICAL_RISK",
+    "proxy",
+    "decision_source",
+    "internal_reason",
+    "ml_score",
+    "is_vpn",
+    "is_proxy",
 }
 
 
@@ -151,7 +157,7 @@ def test_anonymous_third_pdf_requires_login_with_clean_response() -> None:
         assert third.status_code == 403
         assert third.json() == {
             "success": False,
-            "message": "Please log in to continue.",
+            "message": "Free limit reached. Please log in to continue.",
             "requires_login": True,
         }
         _assert_customer_safe(third.json())

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.core.admin_auth import require_admin_api_key
 from app.config import get_settings
@@ -23,6 +23,7 @@ from app.fraud_engine.training_service import TrainingService
 from app.models.fraud_event import FraudEventType, FraudSeverity
 from app.repositories.fraud_engine_repository import FraudEngineRepository
 from app.services.fraud_event_service import FraudEventService
+from app.services.rate_limit_service import RateLimitService, client_ip
 from app.utils.security import generate_uuid, utc_now
 
 router = APIRouter(
@@ -36,6 +37,7 @@ model_registry = ModelRegistry(repository=fraud_engine_repository)
 training_service = TrainingService(repository=fraud_engine_repository, registry=model_registry)
 fraud_event_service = FraudEventService()
 settings = get_settings()
+rate_limit_service = RateLimitService()
 
 SeverityParam = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -46,12 +48,14 @@ SeverityParam = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
     tags=["Admin Fraud"],
 )
 async def admin_fraud_events(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
     severity: SeverityParam | None = None,
     event_type: str | None = None,
     visitor_id: str | None = None,
     allowed: bool | None = None,
 ) -> FraudEventListResponse:
+    await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_fraud_events(
         limit=limit,
         severity=severity,
@@ -79,8 +83,10 @@ async def admin_fraud_events(
     tags=["Admin Fraud"],
 )
 async def admin_fraud_visitors(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> AdminFraudVisitorsResponse:
+    await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_fraud_visitors(limit=limit)
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_FRAUD_VISITORS.value,
@@ -95,7 +101,8 @@ async def admin_fraud_visitors(
     response_model=AdminFraudSummaryResponse,
     tags=["Admin Fraud"],
 )
-async def admin_fraud_summary() -> AdminFraudSummaryResponse:
+async def admin_fraud_summary(request: Request) -> AdminFraudSummaryResponse:
+    await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_fraud_summary()
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_FRAUD_SUMMARY.value,
@@ -110,8 +117,10 @@ async def admin_fraud_summary() -> AdminFraudSummaryResponse:
     tags=["Admin Fraud"],
 )
 async def admin_visitor_investigation(
+    request: Request,
     visitor_id: str,
 ) -> AdminVisitorInvestigationResponse:
+    await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_visitor_investigation(
         visitor_id=visitor_id,
     )
@@ -125,8 +134,10 @@ async def admin_visitor_investigation(
 
 @router.get("/pdfs", response_model=AdminPDFListResponse, tags=["Admin PDFs"])
 async def admin_pdfs(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> AdminPDFListResponse:
+    await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_all_pdfs(limit=limit)
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_ALL_PDFS.value,
@@ -142,8 +153,10 @@ async def admin_pdfs(
     tags=["Admin Audit"],
 )
 async def admin_audit_logs(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> AdminAuditLogListResponse:
+    await _enforce_admin_rate_limit(request)
     logs = await admin_audit_service.list_logs(limit=limit)
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_AUDIT_LOGS.value,
@@ -168,7 +181,11 @@ async def admin_audit_logs(
 
 
 @router.post("/fraud/label", tags=["Admin Fraud"])
-async def admin_apply_fraud_label(payload: FraudLabelRequest) -> dict[str, object]:
+async def admin_apply_fraud_label(
+    request: Request,
+    payload: FraudLabelRequest,
+) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     if payload.label not in {0, 1}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="label must be 0 or 1")
     label_id = generate_uuid()
@@ -210,10 +227,12 @@ async def admin_apply_fraud_label(payload: FraudLabelRequest) -> dict[str, objec
 
 @router.get("/fraud/decisions", tags=["Admin Fraud"])
 async def admin_fraud_decisions(
+    request: Request,
     limit: int = Query(default=100, ge=1, le=500),
     visitor_id: str | None = None,
     action_type: str | None = None,
 ) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     decisions = await fraud_engine_repository.list_decisions(
         limit=limit,
         visitor_id=visitor_id,
@@ -233,9 +252,11 @@ async def admin_fraud_decisions(
 
 @router.get("/fraud/features/{visitor_id}", tags=["Admin Fraud"])
 async def admin_fraud_features(
+    request: Request,
     visitor_id: str,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     snapshots = await fraud_engine_repository.list_feature_snapshots_by_visitor(
         visitor_id=visitor_id,
         limit=limit,
@@ -251,9 +272,11 @@ async def admin_fraud_features(
 
 @router.get("/fraud/identity-links/{visitor_id}", tags=["Admin Fraud"])
 async def admin_fraud_identity_links(
+    request: Request,
     visitor_id: str,
     limit: int = Query(default=100, ge=1, le=500),
 ) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     links = await admin_fraud_service.identity_link_repository.list_by_visitor_id(
         visitor_id=visitor_id,
         limit=limit,
@@ -267,8 +290,27 @@ async def admin_fraud_identity_links(
     return {"total": len(links), "limit": limit, "items": _sanitize_doc(links)}
 
 
+@router.get("/fraud/ip-usage", tags=["Admin Fraud"])
+async def admin_ip_usage(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
+    return await admin_fraud_service.get_ip_usage_list(limit=limit)
+
+
+@router.get("/fraud/ip-usage/{ip_address}", tags=["Admin Fraud"])
+async def admin_ip_usage_detail(
+    request: Request,
+    ip_address: str,
+) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
+    return await admin_fraud_service.get_ip_usage_detail(ip_address=ip_address)
+
+
 @router.get("/ml/models", tags=["Admin ML"])
-async def admin_ml_models() -> dict[str, object]:
+async def admin_ml_models(request: Request) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     versions = await model_registry.list_versions()
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_ML_MODELS.value,
@@ -278,7 +320,8 @@ async def admin_ml_models() -> dict[str, object]:
 
 
 @router.get("/ml/models/active", tags=["Admin ML"])
-async def admin_active_ml_model() -> dict[str, object]:
+async def admin_active_ml_model(request: Request) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     active = model_registry.active_config()
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_ML_MODELS.value,
@@ -288,7 +331,8 @@ async def admin_active_ml_model() -> dict[str, object]:
 
 
 @router.post("/ml/train", tags=["Admin ML"])
-async def admin_train_ml_model(payload: MLTrainRequest) -> dict[str, object]:
+async def admin_train_ml_model(request: Request, payload: MLTrainRequest) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     if not settings.ENABLE_ONLINE_ML_TRAINING:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -313,7 +357,8 @@ async def admin_train_ml_model(payload: MLTrainRequest) -> dict[str, object]:
 
 
 @router.post("/ml/models/{model_version_id}/activate", tags=["Admin ML"])
-async def admin_activate_ml_model(model_version_id: str) -> dict[str, object]:
+async def admin_activate_ml_model(request: Request, model_version_id: str) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     model = await model_registry.activate(model_version_id)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found.")
@@ -326,7 +371,8 @@ async def admin_activate_ml_model(model_version_id: str) -> dict[str, object]:
 
 
 @router.post("/ml/models/{model_version_id}/reject", tags=["Admin ML"])
-async def admin_reject_ml_model(model_version_id: str) -> dict[str, object]:
+async def admin_reject_ml_model(request: Request, model_version_id: str) -> dict[str, object]:
+    await _enforce_admin_rate_limit(request)
     model = await model_registry.reject(model_version_id)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found.")
@@ -344,3 +390,12 @@ def _sanitize_doc(value):
     if isinstance(value, dict):
         return {key: _sanitize_doc(item) for key, item in value.items() if key != "_id"}
     return value
+
+
+async def _enforce_admin_rate_limit(request: Request) -> None:
+    await rate_limit_service.check(
+        request,
+        bucket="admin",
+        identifier=client_ip(request),
+        rate=settings.ADMIN_RATE_LIMIT,
+    )

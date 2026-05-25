@@ -1,8 +1,10 @@
 import logging
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, Request, status
 
 from app.config import get_settings
+from app.middleware.rate_limiter import parse_rate_limit, sliding_window_bucket
 from app.redis_client import get_redis
 from app.utils.request_utils import get_client_ip
 
@@ -15,21 +17,25 @@ class RateLimitService:
         request: Request,
         bucket: str,
         identifier: str,
-        limit: int,
-        window_seconds: int,
+        rate: str,
     ) -> None:
         if not get_settings().RATE_LIMIT_ENABLED:
             return
-        key = f"rate:{bucket}:{identifier}"
+        parsed = parse_rate_limit(rate)
+        current_bucket = sliding_window_bucket(
+            datetime.now(UTC).timestamp(),
+            parsed.window_seconds,
+        )
+        key = f"rate:{bucket}:{identifier}:{current_bucket}"
         try:
             redis = get_redis()
             count = await redis.incr(key)
             if count == 1:
-                await redis.expire(key, window_seconds)
-            if int(count) > limit:
+                await redis.expire(key, parsed.window_seconds)
+            if int(count) > parsed.limit:
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                    detail="Too many requests. Please try again later.",
+                    detail="Too many requests. Please wait a moment and try again.",
                 )
         except HTTPException:
             raise

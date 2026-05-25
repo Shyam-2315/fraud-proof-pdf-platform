@@ -8,6 +8,7 @@ from app.models.pdf import PDFGenerationType
 from app.repositories.fraud_event_repository import FraudEventRepository
 from app.repositories.fraud_engine_repository import FraudEngineRepository
 from app.repositories.behavior_repository import BehaviorEventRepository
+from app.repositories.anonymous_ip_usage_repository import AnonymousIPUsageRepository
 from app.repositories.identity_repository import IdentityLinkRepository
 from app.repositories.pdf_repository import PDFRepository
 from app.repositories.risk_repository import IPIntelligenceRepository, RiskScoreSnapshotRepository
@@ -40,6 +41,7 @@ class AdminFraudService:
         behavior_event_repository: BehaviorEventRepository | None = None,
         user_repository: UserRepository | None = None,
         fraud_engine_repository: FraudEngineRepository | None = None,
+        anonymous_ip_usage_repository: AnonymousIPUsageRepository | None = None,
     ) -> None:
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.pdf_repository = pdf_repository or PDFRepository()
@@ -50,6 +52,7 @@ class AdminFraudService:
         self.behavior_event_repository = behavior_event_repository or BehaviorEventRepository()
         self.user_repository = user_repository or UserRepository()
         self.fraud_engine_repository = fraud_engine_repository or FraudEngineRepository()
+        self.anonymous_ip_usage_repository = anonymous_ip_usage_repository or AnonymousIPUsageRepository()
 
     async def get_fraud_events(
         self,
@@ -220,6 +223,28 @@ class AdminFraudService:
             items=[_build_admin_pdf_item(pdf) for pdf in pdfs],
         )
 
+    async def get_ip_usage_list(self, limit: int) -> dict[str, Any]:
+        items = await self.anonymous_ip_usage_repository.list_recent(limit=limit)
+        return {
+            "total": len(items),
+            "limit": limit,
+            "items": [_sanitize_mongo_doc(item) for item in items],
+        }
+
+    async def get_ip_usage_detail(self, ip_address: str) -> dict[str, Any]:
+        items = await self.anonymous_ip_usage_repository.list_recent(limit=500)
+        matched = [item for item in items if item.get("ip_address") == ip_address]
+        if not matched:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="IP usage not found.",
+            )
+        return {
+            "ip_address": ip_address,
+            "total": len(matched),
+            "items": [_sanitize_mongo_doc(item) for item in matched],
+        }
+
 
 def _build_admin_visitor_item(visitor: dict[str, Any]) -> AdminFraudVisitorItem:
     usage_summary = build_usage_summary(visitor)
@@ -272,6 +297,7 @@ def _sanitize_visitor(visitor: dict[str, Any]) -> dict[str, Any]:
         "webgl_hashes": visitor.get("webgl_hashes", []),
         "audio_hashes": visitor.get("audio_hashes", []),
         "automation_signals": visitor.get("automation_signals", {}),
+        "ip_change_history": visitor.get("ip_change_history", []),
         "risk_reasons": visitor.get("risk_reasons", []),
         "last_risk_signals": visitor.get("last_risk_signals", {}),
         "free_usage_count": int(visitor.get("free_usage_count", 0)),

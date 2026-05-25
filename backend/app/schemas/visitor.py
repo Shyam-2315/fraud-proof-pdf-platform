@@ -49,5 +49,5 @@ class VisitorStatusResponse(BaseModel):
     free_usage_limit: int
     remaining_free_uses: int
     is_blocked: bool
-    message: str
+    message: str | None = None
     requires_login: bool = False

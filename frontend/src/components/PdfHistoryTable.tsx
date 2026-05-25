@@ -1,5 +1,5 @@
 import { Download } from "lucide-react";
-import { API_BASE_URL, getAccessToken } from "../api/client";
+import { apiUrl, getAccessToken } from "../api/client";
 import { sendBehaviorEvent } from "../api/userApi";
 import type { PdfHistoryItem } from "../api/userApi";
 import { getIdentityHeaders } from "../utils/visitorIdentity";
@@ -53,7 +53,7 @@ async function downloadPdf(item: PdfHistoryItem) {
   const headers = new Headers(await getIdentityHeaders());
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_BASE_URL}${item.download_url}`, {
+  const response = await fetch(apiUrl(item.download_url), {
     headers,
     credentials: "include",
   });

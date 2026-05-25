@@ -13,7 +13,7 @@ export type VisitorStatus = {
   free_usage_limit: number;
   remaining_free_uses: number;
   is_blocked: boolean;
-  message: string;
+  message: string | null;
   requires_login?: boolean;
 };
 

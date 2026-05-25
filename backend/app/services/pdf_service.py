@@ -1,4 +1,5 @@
 import asyncio
+from datetime import timedelta
 from typing import Any
 
 from fastapi import HTTPException, Request, status
@@ -29,12 +30,15 @@ from app.services.anonymous_usage_service import AnonymousUsageService
 from app.services.behavior_service import BehaviorService, content_hash
 from app.services.fraud_decision_service import FraudDecisionService
 from app.services.fraud_service import FraudService
+from app.services.ip_intelligence import IPIntelligence
+from app.services.risk_engine import RiskEngine
 from app.services.rate_limit_service import client_ip
 from app.services.user_usage_service import UserUsageService
 from app.services.visitor_service import VisitorService
-from app.utils.request_utils import get_normalized_client_ip
+from app.utils.request_utils import get_client_ip_details, get_normalized_client_ip
 from app.utils.pdf_generator import generate_simple_pdf
 from app.utils.security import generate_uuid, normalize_ip, utc_now
+
 
 class PDFService:
     def __init__(
@@ -48,6 +52,8 @@ class PDFService:
         behavior_service: BehaviorService | None = None,
         visitor_service: VisitorService | None = None,
         anonymous_usage_service: AnonymousUsageService | None = None,
+        ip_intelligence: IPIntelligence | None = None,
+        risk_engine: RiskEngine | None = None,
     ) -> None:
         self.settings = get_settings()
         self.visitor_repository = visitor_repository or VisitorRepository()
@@ -59,6 +65,8 @@ class PDFService:
         self.behavior_service = behavior_service or BehaviorService()
         self.visitor_service = visitor_service or VisitorService(repository=self.visitor_repository)
         self.anonymous_usage_service = anonymous_usage_service or AnonymousUsageService()
+        self.ip_intelligence = ip_intelligence or IPIntelligence()
+        self.risk_engine = risk_engine or RiskEngine()
 
     async def generate_pdf_for_anonymous_visitor(
         self,
@@ -94,6 +102,7 @@ class PDFService:
         payload: PDFGenerateRequest,
     ) -> PDFGenerateResponse:
         visitor = await self._get_visitor_from_request(request)
+        ip_details = get_client_ip_details(request)
         ip_address = get_normalized_client_ip(request)
         shared_usage_summary = await self.anonymous_usage_service.build_shared_usage_summary(
             visitor=visitor,
@@ -101,6 +110,30 @@ class PDFService:
         )
         shared_used = shared_usage_summary["free_usage_count"]
         shared_limit = shared_usage_summary["free_usage_limit"]
+        active_window = await self.anonymous_usage_service.get_active_window(ip_address)
+        ip_intelligence = await self.ip_intelligence.lookup(ip_address)
+        behavior_summary = await self._behavior_summary(visitor["_id"])
+        risk_decision = self.risk_engine.decide(
+            {
+                "visitor_usage_count": int(visitor.get("free_usage_count", 0)),
+                "shared_ip_usage_count": int((active_window or {}).get("anonymous_pdf_count", 0)),
+                "shared_usage_count": shared_used,
+                "anon_shared_limit": shared_limit,
+                "unique_visitors_from_ip": len((active_window or {}).get("visitor_ids", [])),
+                "ip_change_count": max(len(visitor.get("ip_addresses", [])) - 1, 0),
+                "proxy_chain_hop_count": int(ip_details.get("proxy_hop_count", 0)),
+                "vpn_proxy_score": int(ip_intelligence.get("risk_score", 0)),
+                "is_datacenter": bool(ip_intelligence.get("is_datacenter", False)),
+                "fingerprint_reuse_count": len(visitor.get("fingerprint_hashes", [])),
+                "session_count": len(visitor.get("session_ids", [])),
+                "user_agent_count": len(visitor.get("user_agents", [])),
+                "webdriver_detected": bool(
+                    (visitor.get("automation_signals") or {}).get("webdriver", False)
+                ),
+                "rapid_generate_attempts": behavior_summary["rapid_generate_attempts"],
+                "no_behavior_before_generate": behavior_summary["no_behavior_before_generate"],
+            }
+        ).as_dict()
         if shared_used >= shared_limit:
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
@@ -112,11 +145,22 @@ class PDFService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=_build_limit_response(message="Free limit reached. Please log in to continue."),
             )
+        if risk_decision["decision"] == "BLOCK":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"success": False, "message": "Too many requests. Please wait a moment and try again."},
+            )
+        if risk_decision["decision"] == "REQUIRE_LOGIN":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_build_limit_response(message="Free limit reached. Please log in to continue."),
+            )
         decision = await self.fraud_decision_service.decide(
             visitor=visitor,
             request=request,
             action_type="PDF_GENERATE_ATTEMPT",
             payload=payload,
+            context={"shared_usage_count": shared_used, "ip_intelligence": ip_intelligence, "ip_details": ip_details},
         )
         await self.fraud_event_service.create_from_request(
             request=request,
@@ -321,6 +365,9 @@ class PDFService:
             await self.anonymous_usage_service.record_anonymous_pdf_usage(
                 ip_address=ip_address,
                 visitor_id=updated_visitor["_id"],
+                anon_id=request.headers.get("X-Anon-Id") or get_visitor_cookie(request.cookies),
+                fingerprint_hash=request.headers.get("X-Device-Fingerprint"),
+                user_agent=request.headers.get("user-agent"),
             )
             await self.fraud_event_service.create_from_request(
                 request=request,
@@ -367,6 +414,7 @@ class PDFService:
             free_usage_count=usage_summary["free_usage_count"],
             free_usage_limit=usage_summary["free_usage_limit"],
             remaining_free_uses=usage_summary["remaining_free_uses"],
+            requires_login=usage_summary["free_usage_count"] >= usage_summary["free_usage_limit"],
         )
 
     async def get_pdf_history_for_visitor(self, request: Request) -> PDFHistoryResponse:
@@ -617,6 +665,21 @@ class PDFService:
             ],
         )
 
+    async def _behavior_summary(self, visitor_id: str) -> dict[str, bool]:
+        recent_generate_clicks = await self.behavior_service.repository.count_by_visitor(
+            visitor_id,
+            event_type="GENERATE_CLICKED",
+            since=utc_now() - timedelta(seconds=60),
+        )
+        page_views = await self.behavior_service.repository.count_by_visitor(
+            visitor_id,
+            event_type="PAGE_VIEW",
+        )
+        return {
+            "rapid_generate_attempts": recent_generate_clicks > 10,
+            "no_behavior_before_generate": page_views == 0,
+        }
+
 
 def _build_history_item(pdf_record: dict[str, Any]) -> PDFHistoryItem:
     return PDFHistoryItem(
@@ -647,7 +710,7 @@ def _first_or_empty(values: list[str]) -> str:
 
 
 def _build_limit_response(
-    message: str = "Please log in to continue.",
+    message: str = "Free limit reached. Please log in to continue.",
 ) -> dict[str, bool | str]:
     return {
         "success": False,

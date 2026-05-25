@@ -3,6 +3,12 @@ import { getIdentityHeaders, getVisitorIdentity } from "../utils/visitorIdentity
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8025";
 
+export function apiUrl(path: string): string {
+  const cleanBase = API_BASE_URL.replace(/\/$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  return `${cleanBase}${cleanPath}`;
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;
@@ -37,7 +43,7 @@ export async function customerRequest<T>(
   }
   const accessToken = getAccessToken();
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  let response = await fetch(`${API_BASE_URL}${path}`, {
+  let response = await fetch(apiUrl(path), {
     ...init,
     headers,
     credentials: "include",
@@ -46,7 +52,7 @@ export async function customerRequest<T>(
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       headers.set("Authorization", `Bearer ${refreshed}`);
-      response = await fetch(`${API_BASE_URL}${path}`, {
+      response = await fetch(apiUrl(path), {
         ...init,
         headers,
         credentials: "include",
@@ -97,7 +103,7 @@ export function clearAuthTokens() {
 async function refreshAccessToken() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return "";
-  const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+  const response = await fetch(apiUrl("/api/auth/refresh"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh_token: refreshToken }),

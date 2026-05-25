@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { API_BASE_URL, getAccessToken } from "../api/client";
+import { apiUrl, getAccessToken } from "../api/client";
 import { ensureVisitorIdentified, generatePdf, getVisitorStatus, sendBehaviorEvent, type GeneratePdfResponse, type VisitorStatus } from "../api/userApi";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
@@ -45,7 +45,7 @@ export default function GeneratePage() {
         if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
           setError("We could not start your session. Please refresh and try again.");
         } else {
-          setError(err instanceof Error ? err.message : "Unable to load usage.");
+          setError("We could not start your session. Please refresh and try again.");
         }
       } finally {
         setLoading(false);
@@ -62,13 +62,23 @@ export default function GeneratePage() {
     setShowLoginPrompt(false);
     setGenerating(true);
     try {
+      await ensureVisitorIdentified();
+      await sendBehaviorEvent("GENERATE_CLICKED", { page: "generate" });
       const result = await generatePdf(values);
       await sendBehaviorEvent("PDF_GENERATED", { pdf_id: result.pdf_id, content: values.content });
       setMessage(result.message || "PDF generated successfully.");
       if (result.pdf_id) setLastPdf({ pdf_id: result.pdf_id, file_name: result.file_name });
-      await refreshStatus();
+      setStatus((current) => ({
+        visitor_id: current?.visitor_id || "",
+        free_usage_count: result.free_usage_count ?? current?.free_usage_count ?? 0,
+        free_usage_limit: result.free_usage_limit ?? current?.free_usage_limit ?? 2,
+        remaining_free_uses: result.remaining_free_uses ?? current?.remaining_free_uses ?? 0,
+        is_blocked: Boolean(result.requires_login),
+        message: null,
+        requires_login: Boolean(result.requires_login),
+      }));
     } catch (err) {
-      if (err instanceof ApiError && err.status === 403) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
         const body = err.body as Partial<GeneratePdfResponse>;
         await sendBehaviorEvent("LIMIT_REACHED", { status: err.status });
         setMessage("");
@@ -77,7 +87,7 @@ export default function GeneratePage() {
         await refreshStatus();
         return;
       }
-      setError(err instanceof Error ? err.message : "PDF generation failed.");
+      setError("Too many requests. Please wait a moment and try again.");
     } finally {
       setGenerating(false);
     }
@@ -158,7 +168,7 @@ async function downloadPdf(pdfId: string, fileName?: string) {
   const headers = new Headers(await getIdentityHeaders());
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${API_BASE_URL}/api/pdf/download/${pdfId}`, {
+  const response = await fetch(apiUrl(`/api/pdf/download/${pdfId}`), {
     headers,
     credentials: "include",
   });

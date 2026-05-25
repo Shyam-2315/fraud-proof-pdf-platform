@@ -1,9 +1,12 @@
 import { createFingerprintBundle, getDeviceInfo, type DeviceInfo } from "./fingerprint";
 
+const ANON_KEY = "fraud_pdf_anon_id";
 const VISITOR_KEY = "fraud_pdf_visitor_id";
+const FINGERPRINT_KEY = "fraud_pdf_fingerprint_hash";
 const SESSION_KEY = "fraud_pdf_session_id";
 
 export type VisitorIdentity = {
+  anonId: string;
   localStorageId: string;
   sessionId: string;
   fingerprintHash: string;
@@ -34,13 +37,21 @@ function getOrCreateStorageId(storage: Storage, key: string, prefix: string) {
   return value;
 }
 
+function getOrCreateStoredValue(storage: Storage, key: string, value: string) {
+  const existing = storage.getItem(key);
+  if (existing) return existing;
+  storage.setItem(key, value);
+  return value;
+}
+
 export async function getVisitorIdentity(): Promise<VisitorIdentity> {
   const deviceInfo = await getDeviceInfo();
   const bundle = await createFingerprintBundle(deviceInfo);
   return {
+    anonId: getOrCreateStorageId(localStorage, ANON_KEY, "anon"),
     localStorageId: getOrCreateStorageId(localStorage, VISITOR_KEY, "visitor"),
     sessionId: getOrCreateStorageId(sessionStorage, SESSION_KEY, "session"),
-    fingerprintHash: bundle.fingerprintHash,
+    fingerprintHash: getOrCreateStoredValue(localStorage, FINGERPRINT_KEY, bundle.fingerprintHash),
     deviceProfileHash: bundle.deviceProfileHash,
     canvasHash: bundle.canvasHash,
     webglHash: bundle.webglHash,
@@ -60,7 +71,7 @@ export async function getVisitorIdentity(): Promise<VisitorIdentity> {
 export async function getIdentityHeaders(): Promise<Record<string, string>> {
   const identity = await getVisitorIdentity();
   return {
-    "X-Anon-Id": identity.localStorageId,
+    "X-Anon-Id": identity.anonId,
     "X-Device-Fingerprint": identity.fingerprintHash,
     "X-Visitor-Id": identity.localStorageId,
     "X-Session-Id": identity.sessionId,

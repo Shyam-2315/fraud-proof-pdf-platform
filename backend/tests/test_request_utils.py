@@ -10,7 +10,7 @@ def teardown_function() -> None:
 
 
 def test_development_forwarded_for_works(monkeypatch) -> None:
-    _set_env(monkeypatch, APP_ENV="development", TRUST_PROXY_HEADERS="false")
+    _set_env(monkeypatch, APP_ENV="development", TRUST_PROXY_HEADERS="true")
     request = _request(
         client_host="127.0.0.1",
         headers={"X-Forwarded-For": "198.51.100.10, 10.0.0.2"},
@@ -34,7 +34,6 @@ def test_production_with_trusted_proxy_uses_forwarded_for(monkeypatch) -> None:
         monkeypatch,
         APP_ENV="production",
         TRUST_PROXY_HEADERS="true",
-        TRUSTED_PROXY_IPS="172.25.0.0/16",
     )
     request = _request(
         client_host="172.25.0.5",
@@ -49,7 +48,6 @@ def test_x_real_ip_is_used_when_forwarded_for_is_missing(monkeypatch) -> None:
         monkeypatch,
         APP_ENV="production",
         TRUST_PROXY_HEADERS="true",
-        TRUSTED_PROXY_IPS="172.25.0.0/16",
     )
     request = _request(
         client_host="172.25.0.5",
@@ -57,6 +55,20 @@ def test_x_real_ip_is_used_when_forwarded_for_is_missing(monkeypatch) -> None:
     )
 
     assert get_client_ip(request) == "198.51.100.31"
+
+
+def test_cf_connecting_ip_has_priority(monkeypatch) -> None:
+    _set_env(monkeypatch, APP_ENV="production", TRUST_PROXY_HEADERS="true")
+    request = _request(
+        client_host="172.25.0.5",
+        headers={
+            "CF-Connecting-IP": "198.51.100.40",
+            "X-Forwarded-For": "198.51.100.41, 10.0.0.1",
+            "X-Real-IP": "198.51.100.42",
+        },
+    )
+
+    assert get_client_ip(request) == "198.51.100.40"
 
 
 def test_fallback_works_when_request_client_is_missing(monkeypatch) -> None:

@@ -18,6 +18,7 @@ from app.fraud_engine.decision_engine import FraudEngineDecisionService
 from app.fraud_engine.identity_graph import IdentityGraphService
 from app.services.rate_limit_service import client_ip
 from app.services.risk_scoring_service import RiskScoringService
+from app.services.visitor_resolution import VisitorResolutionService
 from app.utils.security import (
     generate_uuid,
     normalize_ip,
@@ -47,6 +48,7 @@ class VisitorService:
         )
         self.risk_scoring_service = risk_scoring_service or RiskScoringService()
         self.fraud_engine_decision_service = fraud_engine_decision_service or FraudEngineDecisionService()
+        self.visitor_resolution_service = VisitorResolutionService(repository=self.repository)
 
     async def identify_visitor(
         self,
@@ -401,41 +403,8 @@ class VisitorService:
         return final_visitor, False, cookie_id
 
     async def find_visitor_from_request(self, request: Request) -> dict[str, Any] | None:
-        cookie_id = get_visitor_cookie(request.cookies)
-        anon_id = request.headers.get("X-Anon-Id")
-        local_storage_id = request.headers.get("X-Visitor-Id")
-        fingerprint_hash = request.headers.get("X-Device-Fingerprint")
-        session_id = request.headers.get("X-Session-Id")
-
-        if cookie_id:
-            visitor = await self.repository.find_by_cookie_id(cookie_id)
-            if visitor is not None:
-                return visitor
-
-        if anon_id:
-            visitor = await self.repository.find_by_cookie_id(anon_id)
-            if visitor is not None:
-                return visitor
-            visitor = await self.repository.find_by_local_storage_id(anon_id)
-            if visitor is not None:
-                return visitor
-
-        if local_storage_id:
-            visitor = await self.repository.find_by_local_storage_id(local_storage_id)
-            if visitor is not None:
-                return visitor
-
-        if fingerprint_hash:
-            visitor = await self.repository.find_by_fingerprint_hash(fingerprint_hash)
-            if visitor is not None:
-                return visitor
-
-        if session_id:
-            visitor = await self.repository.find_by_session_id(session_id)
-            if visitor is not None:
-                return visitor
-
-        return None
+        visitor, _ = await self.visitor_resolution_service.resolve(request)
+        return visitor
 
     async def _create_identity_link(
         self,

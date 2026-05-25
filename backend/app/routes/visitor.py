@@ -33,8 +33,7 @@ async def identify_visitor(
         request,
         bucket="visitor_identify",
         identifier=client_ip(request),
-        limit=60,
-        window_seconds=3600,
+        rate=anonymous_usage_service.settings.VISITOR_IDENTIFY_RATE_LIMIT,
     )
     try:
         visitor, is_new_visitor, cookie_id = await visitor_service.identify_visitor(
@@ -65,11 +64,17 @@ async def identify_visitor(
 
 @router.get("/status", response_model=VisitorStatusResponse)
 async def visitor_status(request: Request) -> VisitorStatusResponse:
+    await rate_limit_service.check(
+        request,
+        bucket="visitor_status",
+        identifier=client_ip(request),
+        rate=anonymous_usage_service.settings.VISITOR_STATUS_RATE_LIMIT,
+    )
     visitor = await visitor_service.find_visitor_from_request(request)
     if visitor is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Visitor not found. Please identify visitor first.",
+            detail="We could not start your session. Please refresh and try again.",
         )
 
     usage_summary = await anonymous_usage_service.build_shared_usage_summary(
@@ -83,16 +88,6 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
         visitor_id=visitor["_id"],
         **usage_summary,
         is_blocked=is_blocked,
-        message=(
-            LOGIN_REQUIRED_MESSAGE
-            if requires_login
-            else _build_customer_status_message(usage_summary["remaining_free_uses"])
-        ),
+        message=LOGIN_REQUIRED_MESSAGE if requires_login else None,
         requires_login=requires_login,
     )
-
-
-def _build_customer_status_message(remaining_free_uses: int) -> str:
-    if remaining_free_uses == 1:
-        return "You have 1 free PDF generation remaining."
-    return f"You have {remaining_free_uses} free PDF generations remaining."

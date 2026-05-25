@@ -37,8 +37,7 @@ async def generate_pdf(
         request,
         bucket="pdf_generate",
         identifier=identifier,
-        limit=20,
-        window_seconds=3600,
+        rate=pdf_service.settings.PDF_GENERATE_RATE_LIMIT,
     )
     try:
         return await pdf_service.generate_pdf(

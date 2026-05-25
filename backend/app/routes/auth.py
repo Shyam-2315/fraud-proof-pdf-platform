@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Request
 
+from app.config import get_settings
 from app.core.auth import get_current_user
 from app.schemas.auth import (
     AuthResponse,
@@ -16,6 +17,7 @@ from app.services.rate_limit_service import RateLimitService, client_ip
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 auth_service = AuthService()
 rate_limit_service = RateLimitService()
+settings = get_settings()
 
 
 @router.post("/register", response_model=AuthResponse)
@@ -27,8 +29,7 @@ async def register(
         request,
         bucket="auth_register",
         identifier=client_ip(request),
-        limit=5,
-        window_seconds=3600,
+        rate=settings.AUTH_REGISTER_RATE_LIMIT,
     )
     return await auth_service.register_user(payload=payload, request=request)
 
@@ -42,8 +43,7 @@ async def login(
         request,
         bucket="auth_login",
         identifier=f"{client_ip(request)}:{str(payload.email).lower()}",
-        limit=5,
-        window_seconds=600,
+        rate=settings.AUTH_LOGIN_RATE_LIMIT,
     )
     return await auth_service.login_user(payload=payload, request=request)
 
