@@ -3,6 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.admin_auth import require_admin_api_key
+from app.config import get_settings
 from app.models.fraud_event import AdminAuditAction
 from app.schemas.fraud_event import (
     AdminAuditLogItem,
@@ -34,6 +35,7 @@ fraud_engine_repository = FraudEngineRepository()
 model_registry = ModelRegistry(repository=fraud_engine_repository)
 training_service = TrainingService(repository=fraud_engine_repository, registry=model_registry)
 fraud_event_service = FraudEventService()
+settings = get_settings()
 
 SeverityParam = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 
@@ -287,6 +289,14 @@ async def admin_active_ml_model() -> dict[str, object]:
 
 @router.post("/ml/train", tags=["Admin ML"])
 async def admin_train_ml_model(payload: MLTrainRequest) -> dict[str, object]:
+    if not settings.ENABLE_ONLINE_ML_TRAINING:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Online ML training is disabled in this environment. "
+                "Run training locally and upload model files, or enable it in environment settings."
+            ),
+        )
     result = await training_service.train(
         synthetic_csv=payload.synthetic_csv,
         demo=payload.demo,

@@ -9,9 +9,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     APP_NAME: str = "PDFCraft"
     APP_ENV: str = "development"
-    APP_PORT: int = 8025
+    APP_PORT: int = Field(
+        default=8025,
+        validation_alias=AliasChoices("APP_PORT", "PORT"),
+    )
     APP_HOST: str = "0.0.0.0"
     FRONTEND_URL: str = "http://localhost:3025"
+    ADMIN_FRONTEND_URL: str = "http://localhost:3035"
     BACKEND_PUBLIC_URL: str = "http://localhost:8025"
 
     MONGODB_URL: str = Field(
@@ -60,6 +64,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     ML_MODELS_DIR: str = "models/fraud"
     ML_AUTO_LOAD_ACTIVE_MODEL: bool = True
+    ENABLE_ONLINE_ML_TRAINING: bool = True
     ENABLE_API_DOCS: bool = True
     WEB_CONCURRENCY: int = 1
 
@@ -113,6 +118,9 @@ class Settings(BaseSettings):
             raise ValueError("SECURE_COOKIES must be true in production")
         if "*" in self.CORS_ORIGINS:
             raise ValueError("Wildcard CORS origins are not allowed in production")
+        for field_name in ("FRONTEND_URL", "ADMIN_FRONTEND_URL", "BACKEND_PUBLIC_URL"):
+            if not getattr(self, field_name).startswith("https://"):
+                raise ValueError(f"{field_name} must use HTTPS in production")
         return self
 
 

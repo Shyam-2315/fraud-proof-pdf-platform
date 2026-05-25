@@ -56,9 +56,8 @@ function MLEnginePage() {
   const train = async () => {
     setTraining(true);
     try {
-      const res = await adminApi.trainMLModel({ demo, auto_activate: autoActivate });
+      await adminApi.trainMLModel({ demo, auto_activate: autoActivate });
       toast.success("Training completed");
-      console.log("Train result:", res);
       load();
     } catch (err: any) {
       toast.error(err?.message || "Training failed.");

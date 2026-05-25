@@ -4,11 +4,11 @@ from uuid import uuid4
 import httpx
 from pymongo import MongoClient
 
+from conftest import TEST_MONGO_DB_NAME, TEST_MONGO_URL
+
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8025")
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "change-me-admin-key")
-MONGO_URL = os.getenv("TEST_MONGO_URL", os.getenv("MONGO_URL", "mongodb://localhost:27225"))
-MONGO_DB_NAME = os.getenv("TEST_MONGO_DB_NAME", "fraud_proof_pdf")
 RUN_IP_SEGMENT = uuid4().int % 200 + 1
 
 
@@ -144,8 +144,8 @@ def test_authenticated_usage_history_and_download_ownership() -> None:
 
 
 def test_plan_limits_can_be_changed_for_pro_and_business() -> None:
-    mongo = MongoClient(MONGO_URL)
-    db = mongo[MONGO_DB_NAME]
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         user = _register(client, _email("plan"))
         user_id = user["user"]["id"]

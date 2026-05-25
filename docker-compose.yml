@@ -22,8 +22,6 @@ services:
     container_name: fraud-pdf-frontend
     env_file:
       - ./frontend/.env
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8025
     ports:
       - "3025:3025"
     depends_on:
@@ -36,10 +34,8 @@ services:
     build:
       context: ./pdfcraft-guardian-main
     container_name: fraud-pdf-admin-frontend
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8025
-      - VITE_APP_NAME=PDFCraft Internal Admin
-      - VITE_APP_ENV=development
+    env_file:
+      - ./pdfcraft-guardian-main/.env
     ports:
       - "3035:3035"
     depends_on:

@@ -14,13 +14,19 @@ async def connect_to_redis() -> None:
     global _redis
 
     settings = get_settings()
-    _redis = redis.from_url(
+    client = redis.from_url(
         settings.REDIS_URL,
         encoding="utf-8",
         decode_responses=True,
     )
-    await ping_redis()
-    logger.info("Connected to Redis")
+    try:
+        _redis = client
+        await ping_redis()
+        logger.info("Connected to Redis")
+    except Exception as exc:
+        logger.warning("Redis unavailable; continuing without Redis error=%s", exc)
+        await client.aclose()
+        _redis = None
 
 
 async def close_redis_connection() -> None:

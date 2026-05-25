@@ -59,7 +59,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.prod
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.your-domain.com}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-https://api.pdfcraft.your-domain.com}
         VITE_APP_NAME: ${VITE_APP_NAME:-PDFCraft}
         VITE_APP_ENV: ${VITE_APP_ENV:-production}
     container_name: fraud-pdf-frontend
@@ -78,7 +78,7 @@ services:
       context: ./pdfcraft-guardian-main
       dockerfile: Dockerfile.prod
       args:
-        VITE_API_BASE_URL: ${ADMIN_VITE_API_BASE_URL:-https://api.your-domain.com}
+        VITE_API_BASE_URL: ${ADMIN_VITE_API_BASE_URL:-https://api.pdfcraft.your-domain.com}
         VITE_APP_NAME: ${ADMIN_VITE_APP_NAME:-PDFCraft Internal Admin}
         VITE_APP_ENV: ${ADMIN_VITE_APP_ENV:-production}
     container_name: fraud-pdf-admin-frontend

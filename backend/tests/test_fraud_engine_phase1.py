@@ -7,6 +7,8 @@ from uuid import uuid4
 import httpx
 from pymongo import MongoClient
 
+from conftest import TEST_MONGO_DB_NAME, TEST_MONGO_URL
+
 os.environ.setdefault("ADMIN_API_KEY", "change-me-admin-key")
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -15,8 +17,6 @@ from app.fraud_engine.rule_engine import RuleEngine
 
 
 BASE_URL = os.getenv("TEST_BASE_URL", "http://localhost:8025")
-MONGO_URL = os.getenv("TEST_MONGO_URL", os.getenv("MONGO_URL", "mongodb://localhost:27225"))
-MONGO_DB_NAME = os.getenv("TEST_MONGO_DB_NAME", "fraud_proof_pdf")
 
 CUSTOMER_FORBIDDEN_FIELDS = {
     "risk_score",
@@ -107,8 +107,8 @@ def test_same_fingerprint_with_new_cookie_uses_strong_match() -> None:
 
     assert second_body["visitor_id"] == first_body["visitor_id"]
 
-    mongo = MongoClient(MONGO_URL)
-    link = mongo[MONGO_DB_NAME].visitor_identity_links.find_one(
+    mongo = MongoClient(TEST_MONGO_URL)
+    link = mongo[TEST_MONGO_DB_NAME].visitor_identity_links.find_one(
         {
             "source_visitor_id": first_body["visitor_id"],
             "target_visitor_id": first_body["visitor_id"],

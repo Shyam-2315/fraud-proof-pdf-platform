@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const frontendRoot = resolve(scriptDir, "..");
 
 const customerFiles = [
   "src/components/AccountUsageCard.tsx",
@@ -37,7 +41,7 @@ const forbidden = [
 const failures = [];
 
 for (const file of customerFiles) {
-  const path = resolve(process.cwd(), file);
+  const path = resolve(frontendRoot, file);
   const content = readFileSync(path, "utf8");
   for (const term of forbidden) {
     if (term.pattern.test(content)) {

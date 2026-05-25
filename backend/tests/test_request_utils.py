@@ -2,6 +2,7 @@ from starlette.requests import Request
 
 from app.config import get_settings
 from app.utils.request_utils import get_client_ip
+from conftest import apply_test_env
 
 
 def teardown_function() -> None:
@@ -51,13 +52,7 @@ def test_fallback_works_when_request_client_is_missing(monkeypatch) -> None:
 
 
 def _set_env(monkeypatch, **values: str) -> None:
-    for key, value in values.items():
-        monkeypatch.setenv(key, value)
-    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-value-that-is-long-enough")
-    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-key-that-is-long-enough")
-    monkeypatch.setenv("SECURE_COOKIES", "true")
-    monkeypatch.setenv("ENABLE_DEFAULT_ADMIN_SEED", "false")
-    get_settings.cache_clear()
+    apply_test_env(monkeypatch, **values)
 
 
 def _request(client_host: str | None, headers: dict[str, str]) -> Request:

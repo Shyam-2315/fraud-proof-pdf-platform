@@ -16,7 +16,6 @@ export class ApiError extends Error {
 
 const ACCESS_TOKEN_KEY = "pdfcraft_access_token";
 const REFRESH_TOKEN_KEY = "pdfcraft_refresh_token";
-const ADMIN_ACCESS_TOKEN_KEY = "admin_access_token";
 
 async function parseResponse(response: Response) {
   const contentType = response.headers.get("content-type") || "";
@@ -77,18 +76,6 @@ export async function identifyRequest<T>(): Promise<T> {
   });
 }
 
-export function getAdminKey() {
-  return sessionStorage.getItem("admin_api_key") || "";
-}
-
-export function setAdminKey(key: string) {
-  sessionStorage.setItem("admin_api_key", key);
-}
-
-export function clearAdminKey() {
-  sessionStorage.removeItem("admin_api_key");
-}
-
 export function getAccessToken() {
   return sessionStorage.getItem(ACCESS_TOKEN_KEY) || "";
 }
@@ -107,18 +94,6 @@ export function clearAuthTokens() {
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
-export function getAdminAccessToken() {
-  return sessionStorage.getItem(ADMIN_ACCESS_TOKEN_KEY) || "";
-}
-
-export function setAdminAccessToken(token: string) {
-  sessionStorage.setItem(ADMIN_ACCESS_TOKEN_KEY, token);
-}
-
-export function clearAdminAccessToken() {
-  sessionStorage.removeItem(ADMIN_ACCESS_TOKEN_KEY);
-}
-
 async function refreshAccessToken() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return "";
@@ -134,25 +109,4 @@ async function refreshAccessToken() {
   const body = (await response.json()) as { access_token: string; refresh_token: string };
   setAuthTokens(body.access_token, body.refresh_token);
   return body.access_token;
-}
-
-export async function adminRequest<T>(
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  const headers = new Headers(init.headers);
-  const key = getAdminKey();
-  const adminToken = getAdminAccessToken();
-  if (key) headers.set("X-Admin-API-Key", key);
-  if (adminToken) headers.set("Authorization", `Bearer ${adminToken}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-  const body = await parseResponse(response);
-  if (!response.ok) {
-    if (response.status === 403) {
-      clearAdminKey();
-      clearAdminAccessToken();
-    }
-    throw new ApiError(response.status, body);
-  }
-  return body as T;
 }
