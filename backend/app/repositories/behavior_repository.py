@@ -88,6 +88,10 @@ async def ensure_behavior_indexes() -> None:
         name="idx_behavior_events_created_at",
     )
     await collection.create_index(
+        [("visitor_id", ASCENDING), ("created_at", DESCENDING)],
+        name="idx_behavior_events_visitor_created_at",
+    )
+    await collection.create_index(
         [("metadata.content_hash", ASCENDING)],
         name="idx_behavior_events_content_hash",
         sparse=True,

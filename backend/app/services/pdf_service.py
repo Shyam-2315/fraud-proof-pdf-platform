@@ -84,9 +84,8 @@ class PDFService:
         payload: PDFGenerateRequest,
     ) -> PDFGenerateResponse:
         current_user = await get_current_user_optional(request)
-        visitor = await self._get_optional_visitor_from_request(request)
-
         if current_user is not None:
+            visitor = await self._get_optional_visitor_from_request(request)
             return await self._generate_pdf_for_authenticated_user(
                 request=request,
                 payload=payload,
@@ -94,31 +93,48 @@ class PDFService:
                 visitor=visitor,
             )
 
+        visitor = await self._get_visitor_from_request(request)
         return await self._generate_pdf_for_anonymous_visitor(
             request=request,
             payload=payload,
+            visitor=visitor,
         )
 
     async def _generate_pdf_for_anonymous_visitor(
         self,
         request: Request,
         payload: PDFGenerateRequest,
+        visitor: dict[str, Any],
     ) -> PDFGenerateResponse:
-        visitor = await self._get_visitor_from_request(request)
         ip_details = get_client_ip_details(request)
         ip_address = get_normalized_client_ip(request)
-        shared_usage_summary = await self.anonymous_usage_service.build_shared_usage_summary(
+        anon_id = request.headers.get("X-Anon-Id") or get_visitor_cookie(request.cookies)
+        fingerprint_hash = request.headers.get("X-Device-Fingerprint")
+        user_agent = request.headers.get("user-agent")
+        shared_usage_snapshot = await self.anonymous_usage_service.get_shared_usage_snapshot(
             visitor=visitor,
             ip_address=ip_address,
         )
-        shared_used = shared_usage_summary["free_usage_count"]
-        shared_limit = shared_usage_summary["free_usage_limit"]
-        active_window = await self.anonymous_usage_service.get_active_window(ip_address)
+        shared_used = int(shared_usage_snapshot["free_usage_count"])
+        shared_limit = int(shared_usage_snapshot["free_usage_limit"])
+        if shared_used >= shared_limit:
+            await self.behavior_service.record_internal_event(
+                visitor_id=visitor["_id"],
+                user_id=None,
+                event_type="LIMIT_REACHED",
+                metadata={"reason": "SHARED_IP_FREE_LIMIT_REACHED"},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_build_limit_response(message="Free limit reached. Please log in to continue."),
+            )
+
+        active_window = shared_usage_snapshot.get("active_window")
         ip_intelligence = await self.ip_intelligence.lookup(ip_address)
         behavior_summary = await self._behavior_summary(visitor["_id"])
         risk_decision = self.risk_engine.decide(
             {
-                "visitor_usage_count": int(visitor.get("free_usage_count", 0)),
+                "visitor_usage_count": int(shared_usage_snapshot["visitor_usage_count"]),
                 "shared_ip_usage_count": int((active_window or {}).get("anonymous_pdf_count", 0)),
                 "shared_usage_count": shared_used,
                 "anon_shared_limit": shared_limit,
@@ -137,17 +153,6 @@ class PDFService:
                 "no_behavior_before_generate": behavior_summary["no_behavior_before_generate"],
             }
         ).as_dict()
-        if shared_used >= shared_limit:
-            await self.behavior_service.record_internal_event(
-                visitor_id=visitor["_id"],
-                user_id=None,
-                event_type="LIMIT_REACHED",
-                metadata={"reason": "SHARED_IP_FREE_LIMIT_REACHED"},
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_limit_response(message="Free limit reached. Please log in to continue."),
-            )
         if risk_decision["decision"] == "BLOCK":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -368,9 +373,9 @@ class PDFService:
             await self.anonymous_usage_service.record_anonymous_pdf_usage(
                 ip_address=ip_address,
                 visitor_id=updated_visitor["_id"],
-                anon_id=request.headers.get("X-Anon-Id") or get_visitor_cookie(request.cookies),
-                fingerprint_hash=request.headers.get("X-Device-Fingerprint"),
-                user_agent=request.headers.get("user-agent"),
+                anon_id=anon_id,
+                fingerprint_hash=fingerprint_hash,
+                user_agent=user_agent,
             )
             await self.fraud_event_service.create_from_request(
                 request=request,
@@ -405,26 +410,26 @@ class PDFService:
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Unable to generate PDF. Please try again.",
+                detail="Too many requests. Please wait a moment and try again.",
             ) from exc
 
-        usage_summary = await self.anonymous_usage_service.build_shared_usage_summary(
-            visitor=updated_visitor or visitor,
-            ip_address=ip_address,
-        )
+        visitor_usage_after = int((updated_visitor or visitor).get("free_usage_count", 0))
+        ip_usage_after = int(shared_usage_snapshot["ip_usage_count"]) + 1
+        shared_usage_after = max(visitor_usage_after, ip_usage_after)
+        remaining_after = max(shared_limit - shared_usage_after, 0)
         return PDFGenerateResponse(
             success=True,
             message="PDF generated successfully.",
             pdf_id=pdf_id,
             title=payload.title,
             file_name=file_name,
-            free_limit=usage_summary["free_usage_limit"],
-            used=usage_summary["free_usage_count"],
-            remaining=usage_summary["remaining_free_uses"],
-            free_usage_count=usage_summary["free_usage_count"],
-            free_usage_limit=usage_summary["free_usage_limit"],
-            remaining_free_uses=usage_summary["remaining_free_uses"],
-            requires_login=usage_summary["free_usage_count"] >= usage_summary["free_usage_limit"],
+            free_limit=shared_limit,
+            used=shared_usage_after,
+            remaining=remaining_after,
+            free_usage_count=shared_usage_after,
+            free_usage_limit=shared_limit,
+            remaining_free_uses=remaining_after,
+            requires_login=shared_usage_after >= shared_limit,
         )
 
     async def get_pdf_history_for_visitor(self, request: Request) -> PDFHistoryResponse:
@@ -634,7 +639,7 @@ class PDFService:
         if visitor is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Visitor session not found. Please identify visitor again.",
+                detail="We could not start your session. Please refresh and try again.",
             )
         return visitor
 

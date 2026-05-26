@@ -112,6 +112,14 @@ async def ensure_pdf_indexes() -> None:
         name="idx_generated_pdfs_created_at",
     )
     await collection.create_index(
+        [("visitor_id", ASCENDING), ("created_at", DESCENDING)],
+        name="idx_generated_pdfs_visitor_created_at",
+    )
+    await collection.create_index(
+        [("user_id", ASCENDING), ("created_at", DESCENDING)],
+        name="idx_generated_pdfs_user_created_at",
+    )
+    await collection.create_index(
         [("generation_type", ASCENDING)],
         name="idx_generated_pdfs_generation_type",
     )

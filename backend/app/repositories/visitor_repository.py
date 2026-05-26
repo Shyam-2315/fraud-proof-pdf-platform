@@ -233,6 +233,10 @@ async def ensure_visitor_indexes() -> None:
         name="idx_visitors_primary_fingerprint_hash",
     )
     await collection.create_index(
+        [("ip_addresses", ASCENDING)],
+        name="idx_visitors_ip_addresses",
+    )
+    await collection.create_index(
         [("last_seen_at", ASCENDING)],
         name="idx_visitors_last_seen_at",
     )

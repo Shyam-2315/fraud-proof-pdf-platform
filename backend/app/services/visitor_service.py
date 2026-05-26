@@ -48,7 +48,10 @@ class VisitorService:
         )
         self.risk_scoring_service = risk_scoring_service or RiskScoringService()
         self.fraud_engine_decision_service = fraud_engine_decision_service or FraudEngineDecisionService()
-        self.visitor_resolution_service = VisitorResolutionService(repository=self.repository)
+        self.visitor_resolution_service = VisitorResolutionService(
+            repository=self.repository,
+            fraud_event_service=self.fraud_event_service,
+        )
 
     async def identify_visitor(
         self,

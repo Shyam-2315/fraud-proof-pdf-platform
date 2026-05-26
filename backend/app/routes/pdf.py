@@ -1,4 +1,6 @@
+import logging
 from pathlib import Path
+from time import perf_counter
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
@@ -17,6 +19,8 @@ from app.services.rate_limit_service import RateLimitService, client_ip
 router = APIRouter(prefix="/api/pdf", tags=["PDF"])
 pdf_service = PDFService()
 rate_limit_service = RateLimitService()
+logger = logging.getLogger(__name__)
+SLOW_ENDPOINT_MS = 500
 
 
 @router.post(
@@ -28,24 +32,21 @@ async def generate_pdf(
     payload: PDFGenerateRequest,
     request: Request,
 ) -> PDFGenerateResponse:
+    started_at = perf_counter()
     current_user = await get_current_user_optional(request)
     is_authenticated = current_user is not None
-    if is_authenticated:
-        identifier = request.headers.get("authorization") or current_user["_id"]
-        rate = pdf_service.settings.AUTHENTICATED_PDF_GENERATE_RATE_LIMIT
-    else:
+    if not is_authenticated:
         identifier = (
             request.headers.get("X-Visitor-Id")
             or request.headers.get("X-Device-Fingerprint")
             or client_ip(request)
         )
-        rate = pdf_service.settings.PDF_GENERATE_RATE_LIMIT
-    await rate_limit_service.check(
-        request,
-        bucket="pdf_generate",
-        identifier=identifier,
-        rate=rate,
-    )
+        await rate_limit_service.check(
+            request,
+            bucket="pdf_generate",
+            identifier=identifier,
+            rate=pdf_service.settings.PDF_GENERATE_RATE_LIMIT,
+        )
     try:
         return await pdf_service.generate_pdf(
             request=request,
@@ -59,6 +60,14 @@ async def generate_pdf(
         ):
             return JSONResponse(status_code=exc.status_code, content=exc.detail)
         raise
+    finally:
+        duration_ms = (perf_counter() - started_at) * 1000
+        if duration_ms >= SLOW_ENDPOINT_MS:
+            logger.info(
+                "Slow endpoint path=/api/pdf/generate duration_ms=%.2f authenticated=%s",
+                duration_ms,
+                is_authenticated,
+            )
 
 
 @router.get("/history", response_model=MyPDFHistoryResponse)

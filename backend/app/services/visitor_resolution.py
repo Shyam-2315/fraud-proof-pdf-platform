@@ -5,24 +5,38 @@ from fastapi import Request
 
 from app.core.auth import get_current_user_optional
 from app.core.public_config import get_visitor_cookie
+from app.models.fraud_event import FraudEventType, FraudSeverity
 from app.repositories.visitor_repository import VisitorRepository
+from app.services.fraud_event_service import FraudEventService
 from app.utils.ip_utils import get_client_ip_details
 from app.utils.security import normalize_ip, safe_append_unique, utc_now
 
 logger = logging.getLogger(__name__)
+_RESOLVED_VISITOR_STATE_KEY = "_pdfcraft_resolved_visitor"
+_RESOLUTION_CONTEXT_STATE_KEY = "_pdfcraft_resolution_context"
 
 
 class VisitorResolutionService:
     def __init__(
         self,
         repository: VisitorRepository | None = None,
+        fraud_event_service: FraudEventService | None = None,
     ) -> None:
         self.repository = repository or VisitorRepository()
+        self.fraud_event_service = fraud_event_service or FraudEventService()
 
     async def resolve(self, request: Request) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        cached_visitor = getattr(request.state, _RESOLVED_VISITOR_STATE_KEY, None)
+        cached_context = getattr(request.state, _RESOLUTION_CONTEXT_STATE_KEY, None)
+        if cached_context is not None:
+            return cached_visitor, cached_context
+
         current_user = await get_current_user_optional(request)
         if current_user is not None:
-            return None, self._request_context(request)
+            request_context = self._request_context(request)
+            setattr(request.state, _RESOLUTION_CONTEXT_STATE_KEY, request_context)
+            setattr(request.state, _RESOLVED_VISITOR_STATE_KEY, None)
+            return None, request_context
 
         request_context = self._request_context(request)
         lookup_order = [
@@ -41,6 +55,8 @@ class VisitorResolutionService:
                     request_context=request_context,
                     source=source,
                 )
+                setattr(request.state, _RESOLUTION_CONTEXT_STATE_KEY, request_context)
+                setattr(request.state, _RESOLVED_VISITOR_STATE_KEY, refreshed)
                 return refreshed, request_context
 
         visitor = await self._find_final_fallback(request_context)
@@ -55,12 +71,16 @@ class VisitorResolutionService:
                     "ip_address": request_context["ip_address"],
                 },
             )
+            setattr(request.state, _RESOLUTION_CONTEXT_STATE_KEY, request_context)
+            setattr(request.state, _RESOLVED_VISITOR_STATE_KEY, None)
             return None, request_context
         refreshed = await self._refresh_seen_signals(
             visitor=visitor,
             request_context=request_context,
             source="strong_fallback",
         )
+        setattr(request.state, _RESOLUTION_CONTEXT_STATE_KEY, request_context)
+        setattr(request.state, _RESOLVED_VISITOR_STATE_KEY, refreshed)
         return refreshed, request_context
 
     async def _find_final_fallback(
@@ -101,20 +121,18 @@ class VisitorResolutionService:
 
         current_ips = list(visitor.get("ip_addresses", []))
         ip_change_history = list(visitor.get("ip_change_history", []))
+        ip_change_event: dict[str, Any] | None = None
         if ip_address and current_ips and ip_address not in current_ips:
-            ip_change_history = safe_append_unique(
-                ip_change_history,
-                {
-                    "previous_ip": current_ips[-1],
-                    "current_ip": ip_address,
-                    "changed_at": now,
-                    "visitor_id": visitor.get("_id"),
-                    "fingerprint_hash": fingerprint_hash,
-                    "user_agent": user_agent,
-                    "event_type": "DYNAMIC_IP_CHANGE",
-                },
-                max_items=50,
-            )
+            ip_change_event = {
+                "previous_ip": current_ips[-1],
+                "current_ip": ip_address,
+                "changed_at": now,
+                "visitor_id": visitor.get("_id"),
+                "fingerprint_hash": fingerprint_hash,
+                "user_agent": user_agent,
+                "event_type": FraudEventType.DYNAMIC_IP_CHANGE.value,
+            }
+            ip_change_history = safe_append_unique(ip_change_history, ip_change_event, max_items=50)
 
         update_data = {
             "cookie_ids": safe_append_unique(visitor.get("cookie_ids", []), anon_id),
@@ -134,7 +152,25 @@ class VisitorResolutionService:
             "last_seen_at": now,
         }
         updated = await self.repository.update_visitor(visitor["_id"], update_data)
-        return updated or {**visitor, **update_data}
+        resolved_visitor = updated or {**visitor, **update_data}
+        if ip_change_event is not None:
+            await self.fraud_event_service.create_event(
+                visitor_id=resolved_visitor.get("_id"),
+                event_type=FraudEventType.DYNAMIC_IP_CHANGE.value,
+                severity=FraudSeverity.MEDIUM.value,
+                action="Visitor observed from a new IP address.",
+                allowed=True,
+                risk_score=int(resolved_visitor.get("risk_score", 0)),
+                risk_level=str(resolved_visitor.get("risk_level", "LOW")),
+                fingerprint_hash=fingerprint_hash,
+                local_storage_id=visitor_id_header or anon_id,
+                session_id=session_id,
+                cookie_id=anon_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata=ip_change_event,
+            )
+        return resolved_visitor
 
     def _request_context(self, request: Request) -> dict[str, Any]:
         ip_details = get_client_ip_details(request)

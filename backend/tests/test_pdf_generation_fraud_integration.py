@@ -14,6 +14,8 @@ SHARED_TEST_IPS = [
     "203.0.113.50",
     "203.0.113.51",
     "203.0.113.52",
+    "203.0.113.53",
+    "203.0.113.54",
     "203.0.113.60",
     "203.0.113.61",
 ]
@@ -395,6 +397,125 @@ def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() 
         assert body["remaining_free_uses"] == 0
         assert body["is_blocked"] is True
         assert body["requires_login"] is True
+
+
+def test_same_visitor_two_pdfs_syncs_shared_status_for_incognito() -> None:
+    ip_address = "203.0.113.53"
+    primary_prefix = f"same-visitor-two-{uuid4()}"
+    incognito_prefix = f"same-visitor-incognito-{uuid4()}"
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{primary_prefix}-local",
+            f"{primary_prefix}-session",
+            f"{primary_prefix}-fingerprint",
+        ),
+    ) as primary:
+        _identify(
+            primary,
+            primary_prefix,
+            local_storage_id=f"{primary_prefix}-local",
+            session_id=f"{primary_prefix}-session",
+            fingerprint_hash=f"{primary_prefix}-fingerprint",
+        )
+        assert _generate(primary, "Primary shared first").status_code == 200
+        second_generate = _generate(primary, "Primary shared second")
+        assert second_generate.status_code == 200, second_generate.text
+        assert second_generate.json()["free_usage_count"] == 2
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{incognito_prefix}-local",
+            f"{incognito_prefix}-session",
+            f"{incognito_prefix}-fingerprint",
+        ),
+    ) as incognito:
+        _identify(
+            incognito,
+            incognito_prefix,
+            local_storage_id=f"{incognito_prefix}-local",
+            session_id=f"{incognito_prefix}-session",
+            fingerprint_hash=f"{incognito_prefix}-fingerprint",
+        )
+        status_response = incognito.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        body = status_response.json()
+        _assert_customer_safe(body)
+        assert body["free_usage_count"] == 2
+        assert body["remaining_free_uses"] == 0
+        assert body["requires_login"] is True
+
+    visitor_record = db.visitors.find_one({"local_storage_ids": f"{primary_prefix}-local"})
+    assert visitor_record is not None
+    assert visitor_record["free_usage_count"] == 2
+
+    usage_windows = list(db.anonymous_ip_usage.find({"ip_address": ip_address}))
+    assert usage_windows
+    assert sum(int(window.get("anonymous_pdf_count", 0)) for window in usage_windows) == 2
+    assert all(None not in window.get("visitor_ids", []) for window in usage_windows)
+    assert all(None not in window.get("anon_ids", []) for window in usage_windows)
+    assert all(None not in window.get("fingerprint_hashes", []) for window in usage_windows)
+    assert all(None not in window.get("user_agents", []) for window in usage_windows)
+
+
+def test_incognito_cannot_generate_after_same_ip_browser_uses_two_free_pdfs() -> None:
+    ip_address = "203.0.113.54"
+    primary_prefix = f"same-ip-block-primary-{uuid4()}"
+    incognito_prefix = f"same-ip-block-incognito-{uuid4()}"
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{primary_prefix}-local",
+            f"{primary_prefix}-session",
+            f"{primary_prefix}-fingerprint",
+        ),
+    ) as primary:
+        _identify(
+            primary,
+            primary_prefix,
+            local_storage_id=f"{primary_prefix}-local",
+            session_id=f"{primary_prefix}-session",
+            fingerprint_hash=f"{primary_prefix}-fingerprint",
+        )
+        assert _generate(primary, "Primary block first").status_code == 200
+        assert _generate(primary, "Primary block second").status_code == 200
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{incognito_prefix}-local",
+            f"{incognito_prefix}-session",
+            f"{incognito_prefix}-fingerprint",
+        ),
+    ) as incognito:
+        _identify(
+            incognito,
+            incognito_prefix,
+            local_storage_id=f"{incognito_prefix}-local",
+            session_id=f"{incognito_prefix}-session",
+            fingerprint_hash=f"{incognito_prefix}-fingerprint",
+        )
+        blocked = _generate(incognito, "Incognito blocked")
+        assert blocked.status_code == 403, blocked.text
+        assert blocked.json() == {
+            "success": False,
+            "message": "Free limit reached. Please log in to continue.",
+            "requires_login": True,
+        }
+        _assert_customer_safe(blocked.json())
 
 
 def test_shared_ip_third_new_visitor_is_blocked() -> None:

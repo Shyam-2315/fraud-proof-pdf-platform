@@ -1,3 +1,4 @@
+from functools import lru_cache
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -13,8 +14,7 @@ def generate_simple_pdf(
     content: str,
     output_dir: str = "generated_files",
 ) -> tuple[str, str]:
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    output_path = _ensure_output_dir(output_dir)
 
     file_name = f"generated_{generate_uuid()}.pdf"
     file_path = output_path / file_name
@@ -33,3 +33,10 @@ def generate_simple_pdf(
     document.build(story)
 
     return file_name, file_path.as_posix()
+
+
+@lru_cache(maxsize=8)
+def _ensure_output_dir(output_dir: str) -> Path:
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    return output_path

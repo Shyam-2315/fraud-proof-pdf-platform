@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { apiUrl, getAccessToken } from "../api/client";
-import { ensureVisitorIdentified, generatePdf, getVisitorStatus, sendBehaviorEvent, type GeneratePdfResponse, type VisitorStatus } from "../api/userApi";
+import {
+  ensureVisitorIdentified,
+  generatePdf,
+  getVisitorStatusAfterIdentify,
+  sendBehaviorEvent,
+  type GeneratePdfResponse,
+  type VisitorStatus,
+} from "../api/userApi";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
 import LoadingState from "../components/LoadingState";
@@ -21,18 +28,8 @@ export default function GeneratePage() {
   const [generating, setGenerating] = useState(false);
 
   async function refreshStatus() {
-    try {
-      const nextStatus = await getVisitorStatus();
-      setStatus(nextStatus);
-    } catch (err) {
-      if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
-        await ensureVisitorIdentified();
-        const nextStatus = await getVisitorStatus();
-        setStatus(nextStatus);
-        return;
-      }
-      throw err;
-    }
+    const nextStatus = await getVisitorStatusAfterIdentify();
+    setStatus(nextStatus);
   }
 
   useEffect(() => {
@@ -63,9 +60,7 @@ export default function GeneratePage() {
     setGenerating(true);
     try {
       await ensureVisitorIdentified();
-      await sendBehaviorEvent("GENERATE_CLICKED", { page: "generate" });
       const result = await generatePdf(values);
-      await sendBehaviorEvent("PDF_GENERATED", { pdf_id: result.pdf_id, content: values.content });
       setMessage(result.message || "PDF generated successfully.");
       if (result.pdf_id) setLastPdf({ pdf_id: result.pdf_id, file_name: result.file_name });
       setStatus((current) => ({
@@ -80,11 +75,14 @@ export default function GeneratePage() {
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
         const body = err.body as Partial<GeneratePdfResponse>;
-        await sendBehaviorEvent("LIMIT_REACHED", { status: err.status });
         setMessage("");
         setError(body.message || "Free limit reached. Please log in to continue.");
         if (body.requires_login) setShowLoginPrompt(true);
-        await refreshStatus();
+        try {
+          await refreshStatus();
+        } catch {
+          setError("We could not start your session. Please refresh and try again.");
+        }
         return;
       }
       setError("Too many requests. Please wait a moment and try again.");

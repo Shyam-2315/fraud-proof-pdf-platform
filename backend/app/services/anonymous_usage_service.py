@@ -64,21 +64,52 @@ class AnonymousUsageService:
             now=utc_now(),
         )
 
+    async def get_shared_usage_snapshot(
+        self,
+        *,
+        visitor: dict[str, Any] | None,
+        ip_address: str | None,
+        active_window: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        visitor_usage_count = int((visitor or {}).get("free_usage_count") or 0)
+        free_usage_limit = self.free_usage_limit()
+        normalized_ip = normalize_ip(ip_address)
+        current_window = active_window
+        ip_usage_count = 0
+
+        if self.shared_ip_quota_enabled() and normalized_ip and normalized_ip != "unknown":
+            if current_window is None:
+                current_window = await self.get_active_window(normalized_ip)
+            ip_usage_count = int((current_window or {}).get("anonymous_pdf_count") or 0)
+
+        shared_usage_count = (
+            max(visitor_usage_count, ip_usage_count)
+            if self.shared_ip_quota_enabled()
+            else visitor_usage_count
+        )
+        return {
+            "visitor_usage_count": visitor_usage_count,
+            "ip_usage_count": ip_usage_count,
+            "free_usage_count": shared_usage_count,
+            "free_usage_limit": free_usage_limit,
+            "remaining_free_uses": max(free_usage_limit - shared_usage_count, 0),
+            "active_window": current_window,
+        }
+
     async def build_shared_usage_summary(
         self,
         *,
         visitor: dict[str, Any] | None,
         ip_address: str | None,
+        active_window: dict[str, Any] | None = None,
     ) -> dict[str, int]:
-        visitor_usage_count = int((visitor or {}).get("free_usage_count") or 0)
-        free_usage_limit = self.free_usage_limit()
-        if not self.shared_ip_quota_enabled():
-            shared_usage_count = visitor_usage_count
-        else:
-            ip_usage_count = await self.get_ip_usage_count(ip_address) if ip_address else 0
-            shared_usage_count = max(visitor_usage_count, ip_usage_count)
+        snapshot = await self.get_shared_usage_snapshot(
+            visitor=visitor,
+            ip_address=ip_address,
+            active_window=active_window,
+        )
         return {
-            "free_usage_count": shared_usage_count,
-            "free_usage_limit": free_usage_limit,
-            "remaining_free_uses": max(free_usage_limit - shared_usage_count, 0),
+            "free_usage_count": int(snapshot["free_usage_count"]),
+            "free_usage_limit": int(snapshot["free_usage_limit"]),
+            "remaining_free_uses": int(snapshot["remaining_free_uses"]),
         }

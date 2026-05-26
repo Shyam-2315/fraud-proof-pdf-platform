@@ -1,4 +1,5 @@
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -30,16 +31,7 @@ class IPIntelligenceService:
         return await self.repository.upsert(self._default_record(ip_address, "LOCAL"))
 
     def _lookup_local_risk_list(self, ip_address: str) -> dict[str, Any] | None:
-        path = Path(self.settings.IP_RISK_LIST_PATH)
-        if not path.is_absolute():
-            path = Path(__file__).resolve().parents[2] / path
-        if not path.exists():
-            return None
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-
+        data = _load_local_risk_data(self.settings.IP_RISK_LIST_PATH)
         raw = data.get(ip_address) if isinstance(data, dict) else None
         if raw is None:
             return None
@@ -76,3 +68,17 @@ class IPIntelligenceService:
             "provider": provider,
             "checked_at": utc_now(),
         }
+
+
+@lru_cache(maxsize=1)
+def _load_local_risk_data(configured_path: str) -> dict[str, Any]:
+    path = Path(configured_path)
+    if not path.is_absolute():
+        path = Path(__file__).resolve().parents[2] / path
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
