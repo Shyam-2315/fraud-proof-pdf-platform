@@ -73,9 +73,20 @@ class AuthService:
         email = self.email_verification_service.normalize_and_validate_email(str(payload.email))
         existing_user = await self.user_repository.find_by_email(email)
         if existing_user is not None:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered.",
+            if _is_email_verified(existing_user):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="This email is already registered. Please log in.",
+                )
+            await self.email_verification_service.create_and_send_code(
+                user_id=existing_user["_id"],
+                email=email,
+            )
+            return RegisterResponse(
+                success=True,
+                requires_verification=True,
+                message="This email is already registered but not verified. We sent a new verification code.",
+                email=email,
             )
 
         now = utc_now()
@@ -101,9 +112,21 @@ class AuthService:
         try:
             user = await self.user_repository.create_user(user_data)
         except DuplicateKeyError as exc:
+            existing_user = await self.user_repository.find_by_email(email)
+            if existing_user is not None and not _is_email_verified(existing_user):
+                await self.email_verification_service.create_and_send_code(
+                    user_id=existing_user["_id"],
+                    email=email,
+                )
+                return RegisterResponse(
+                    success=True,
+                    requires_verification=True,
+                    message="This email is already registered but not verified. We sent a new verification code.",
+                    email=email,
+                )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Email already registered.",
+                detail="This email is already registered. Please log in.",
             ) from exc
 
         linked_user = await self._link_request_visitor(
@@ -116,6 +139,7 @@ class AuthService:
         await self.email_verification_service.create_and_send_code(user_id=user["_id"], email=email)
         return RegisterResponse(
             success=True,
+            requires_verification=True,
             message="Account created. Please verify your email.",
             email=email,
         )

@@ -13,6 +13,7 @@ export type AuthUser = {
 
 export type RegisterResponse = {
   success: boolean;
+  requires_verification: boolean;
   message: string;
   email: string;
 };

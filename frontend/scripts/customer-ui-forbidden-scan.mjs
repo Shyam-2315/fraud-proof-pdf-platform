@@ -21,6 +21,7 @@ const customerFiles = [
   "src/pages/PricingPage.tsx",
   "src/pages/SignupPage.tsx",
   "src/pages/UsagePage.tsx",
+  "src/pages/VerifyEmailPage.tsx",
 ];
 
 const forbidden = [

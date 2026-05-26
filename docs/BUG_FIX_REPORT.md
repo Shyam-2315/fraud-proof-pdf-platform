@@ -1,99 +1,130 @@
-# PDFCraft Bug Fix Report
+# Bug Fix Report
 
-## 1. Shared Anonymous Usage Mismatch
+## 1. Browser and Incognito Quota Mismatch
 
-**Bug**  
-Normal browser usage showed `2`, while Incognito from the same IP showed `1`.
+Issue:
 
-**Cause**  
-Visitor usage was incrementing, but shared anonymous IP usage could fall behind. Status then reflected only the lower IP-side count for a new browser on the same IP.
+- Standard browsing and Incognito/private browsing could report different anonymous usage counts for the same user on the same network.
 
-**Fix**  
-Every successful anonymous PDF generation now increments both `visitor.free_usage_count` and `anonymous_ip_usage.anonymous_pdf_count` exactly once through the success path. Shared status is always returned as `max(visitor_usage, ip_usage)` and never as a sum.
+Cause:
 
-## 2. Anonymous PDF Generation Returned 500
+- Visitor-local usage and shared anonymous IP usage were not always advancing in lockstep.
 
-**Bug**  
-Anonymous PDF generation could return `500`.
+Fix:
 
-**Cause**  
-The MongoDB anonymous IP usage upsert previously conflicted by updating the same array fields with both `$setOnInsert` and `$addToSet`.
+- Anonymous PDF success updates both visitor usage and shared anonymous IP usage.
+- Status responses use the maximum of visitor and shared-IP usage rather than splitting the view by browser context.
 
-**Fix**  
-The repository now keeps operators separated:
+## 2. MongoDB Upsert Conflict
 
-- `$inc` only updates `anonymous_pdf_count`
-- `$addToSet` only updates identity arrays
-- `$setOnInsert` only sets static insert fields
-- `$set` only updates timestamps
+Issue:
 
-Null values are excluded from array updates.
+- Anonymous PDF generation could fail with a server error during shared IP usage updates.
 
-## 3. Wrong API Paths on the Deployed Frontend
+Cause:
 
-**Bug**  
-Frontend requests could resolve to bad production paths such as relative `/api/...`, `//api/...`, or `/production/api/...`.
+- The same fields were being targeted by incompatible upsert operators during MongoDB updates.
 
-**Cause**  
-API path construction was not consistently normalized from the configured backend origin.
+Fix:
 
-**Fix**  
-The frontend uses the central `apiUrl()` helper for backend requests, with base/path normalization around `VITE_API_BASE_URL`. Static source tests were added to guard against broken production API path patterns.
+- Upsert operations were separated cleanly across `$inc`, `$addToSet`, `$setOnInsert`, and `$set`.
+- Null values are excluded from array updates.
 
-## 4. Status Could Load Before Identify
+## 3. Frontend API URL Wrong Paths
 
-**Bug**  
-The Generate page could request visitor status before the visitor session bootstrap was complete.
+Issue:
 
-**Cause**  
-Identify and status calls were not centrally sequenced, and repeated calls could race each other.
+- Customer frontend requests could resolve to broken production paths such as relative `/api/...`, duplicated slashes, or malformed production URLs.
 
-**Fix**  
-Frontend visitor bootstrap now:
+Cause:
 
-- caches a successful identify in-memory for the active session
-- locks concurrent identify requests
-- calls identify before status
-- retries status once after `401` or `404` by forcing re-identification
+- API URL construction was not consistently normalized from a configured backend base URL.
 
-If the retry still fails, the customer sees: `We could not start your session. Please refresh and try again.`
+Fix:
 
-## 5. Authenticated Plan Limit Could Be Masked by Rate Limiting
+- The frontend now uses a centralized `apiUrl()` helper for backend requests.
+- Static tests guard against broken production path patterns.
 
-**Bug**  
-An authenticated over-limit request could receive a rate-limit response before the expected plan-limit response.
+## 4. Identify and Status Ordering
 
-**Cause**  
-The PDF generate route applied rate limiting before plan-limit handling for authenticated traffic.
+Issue:
 
-**Fix**  
-Anonymous PDF generation remains rate-limited, while authenticated PDF generation now reaches plan-limit handling without being masked by anonymous-style generate throttling. Existing authenticated over-limit behavior remains the expected `403` upgrade response.
+- The customer app could request visitor status before visitor identification was complete.
 
-## 6. Performance Improvements
+Cause:
 
-### Backend
+- Identify and status requests were not sequenced centrally.
 
-- Avoided duplicate visitor resolution in `/api/pdf/generate` for anonymous requests.
-- Reused a single shared-usage snapshot for anonymous generate decisions and response shaping.
-- Moved the free-limit check ahead of IP intelligence and risk evaluation for blocked anonymous attempts.
-- Added request-scoped visitor resolution caching.
-- Added slow-endpoint timing logs for:
-  - `/api/visitor/identify`
-  - `/api/visitor/status`
-  - `/api/pdf/generate`
-- Cached public config in memory and added `Cache-Control` headers.
-- Cached the local IP intelligence JSON in memory after first load.
-- Added short Redis connect/read timeouts with graceful fallback.
-- Cached PDF output directory creation.
-- Added or strengthened Mongo indexes for visitors, generated PDFs, behavior events, and anonymous IP usage.
+Fix:
 
-### Frontend
+- Frontend visitor bootstrapping now identifies before status checks.
+- Repeated identify requests are de-duplicated.
+- A safe retry path exists when the first status request races a stale session.
 
-- Added in-memory identify caching and concurrency locking.
-- Sequenced identify before status on Generate and Usage flows.
-- Removed duplicate generate-page behavior calls that were adding unnecessary round trips.
-- Continued using backend-returned usage values instead of local usage math.
+## 5. Authenticated Plan Limit Versus Rate Limit Conflict
 
-## 7. Honest Limitation
+Issue:
 
-PDFCraft is fraud-resistant and abuse-resistant, not impossible to bypass. Advanced attackers with rotating residential IPs, fresh devices, or paid anti-detection tooling can still require stronger controls such as CAPTCHA, account reputation, payment verification, or higher-grade external intelligence providers.
+- An authenticated user over their monthly plan limit could receive a generic rate-limit response instead of the intended plan-limit message.
+
+Cause:
+
+- Rate limiting could trigger before authenticated plan-limit handling.
+
+Fix:
+
+- Authenticated generate requests now reach plan-limit enforcement without being masked by anonymous-style rate limiting.
+
+## 6. SMTP Email Debugging and OTP Delivery
+
+Issue:
+
+- OTP verification records could be created successfully while Gmail SMTP delivery still failed.
+
+Cause:
+
+- Gmail on port `587` was not using the full `EHLO -> STARTTLS -> EHLO -> LOGIN` sequence.
+- Gmail app passwords copied with spaces were not normalized.
+- Safe production diagnostics around missing SMTP config and send failures were incomplete.
+
+Fix:
+
+- Port `587` now uses `SMTP + EHLO + STARTTLS + EHLO + LOGIN`.
+- Port `465` uses `SMTP_SSL`.
+- SMTP password whitespace is stripped before login.
+- Missing production SMTP config logs exact missing variable names server-side.
+- Customer-facing failures remain safe and generic.
+- OTP values and SMTP passwords are never logged in production.
+- Admin-only SMTP diagnostics were added through `/api/admin/email/status` and `/api/admin/email/test`.
+
+## 7. Frontend Verification UX
+
+Issue:
+
+- The verification flow was functional but not polished enough for production review.
+
+Cause:
+
+- Signup, login, and verify-email flows lacked a product-grade transition around unverified accounts and resend timing.
+
+Fix:
+
+- Signup redirects directly into verification.
+- Login gives a clean verification prompt for unverified accounts.
+- Verify Email page now includes prefilled email, six-digit entry, resend cooldown, loading states, and clean success/error messages.
+
+## 8. Security and Review Readiness
+
+Issue:
+
+- The repository needed a cleaner review posture around generated files, local env tracking, and example configuration hygiene.
+
+Fix:
+
+- Local `.env` files are being removed from version control and ignored.
+- Cache artifacts and generated files are being excluded from review commits.
+- Example configuration files use placeholders instead of personal deployment values.
+
+## Honest Limitation
+
+PDFCraft is fraud-resistant, not impossible to bypass. Email verification proves control of an inbox, not unique human identity. High-risk production traffic can still justify stronger controls such as CAPTCHA, payment verification, reputation systems, or external device intelligence.

@@ -1,15 +1,15 @@
-# Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+*.pyd
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .venv/
 venv/
+
 .env
 .env.*
-
-# Keep examples
 !.env.example
 !.env.production.example
 !backend/.env.example
@@ -19,39 +19,33 @@ venv/
 !pdfcraft-guardian-main/.env.example
 !pdfcraft-guardian-main/.env.production.example
 
-# Node
 node_modules/
 dist/
 build/
 .npm/
 .vite/
 
-# Logs
+.DS_Store
+Thumbs.db
 *.log
 logs/
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Docker/local data
+storage/
+generated_pdfs/
+models/fraud/
 backups/
+
 backend/storage/generated_pdfs/*
 !backend/storage/generated_pdfs/.gitkeep
 backend/models/fraud/model_versions/*
 !backend/models/fraud/model_versions/.gitkeep
 backend/models/fraud/active_model.json
 backend/models/fraud/feature_columns.json
-
-# Generated datasets
 backend/data/synthetic_fraud_dataset.csv
 backend/data/synthetic_fraud_dataset_metadata.json
 
-# Temporary cookies/test files
 cookies.txt
 *-cookies.txt
 iptest-cookies.txt
 dynamic-ip-cookies.txt
-
-# Windows metadata
 *:Zone.Identifier

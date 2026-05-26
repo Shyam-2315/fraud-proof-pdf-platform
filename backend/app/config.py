@@ -112,6 +112,20 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @field_validator("SMTP_HOST", "SMTP_USERNAME", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", mode="before")
+    @classmethod
+    def strip_smtp_text_fields(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("SMTP_PASSWORD", mode="before")
+    @classmethod
+    def normalize_smtp_password(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return "".join(value.split())
+        return value
+
     @field_validator("COOKIE_SAMESITE")
     @classmethod
     def validate_cookie_samesite(cls, value: str) -> str:

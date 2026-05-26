@@ -121,7 +121,7 @@ def test_verify_email_wrong_code_response_does_not_leak_internal_details() -> No
         )
         assert response.status_code == 400
         body = response.json()
-        assert body == {"detail": "Invalid or expired verification code."}
+        assert body == {"detail": "Invalid verification code."}
         serialized = str(body).lower()
         assert "otp" not in serialized
         assert "hash" not in serialized

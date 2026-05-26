@@ -25,7 +25,7 @@ from app.repositories.user_repository import ensure_user_indexes, seed_default_a
 from app.repositories.user_usage_repository import ensure_user_usage_indexes
 from app.repositories.visitor_repository import ensure_visitor_indexes
 from app.redis_client import close_redis_connection, connect_to_redis
-from app.routes import account, admin_fraud, auth, behavior, pdf, public, visitor
+from app.routes import account, admin_email, admin_fraud, auth, behavior, pdf, public, visitor
 from app.routes.health import router as health_router
 
 settings = get_settings()
@@ -134,3 +134,4 @@ app.include_router(account.router)
 app.include_router(behavior.router)
 app.include_router(pdf.router)
 app.include_router(admin_fraud.router)
+app.include_router(admin_email.router)

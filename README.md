@@ -1,331 +1,246 @@
-# PDFCraft / Fraud Proof PDF Platform
+# PDFCraft
 
-PDFCraft is a customer-facing SaaS for generating downloadable PDFs with anonymous and authenticated usage limits. Fraud Proof PDF Platform is the internal backend and admin system used to enforce sophisticated fraud detection and prevention mechanisms.
+PDFCraft is a fraud-resistant PDF generation SaaS with a customer-facing app, a FastAPI backend, and an internal admin review surface. The product is designed to keep the customer experience simple while enforcing shared anonymous usage limits, account verification, rate limiting, and investigation tooling behind the scenes.
 
-The platform is designed to be fraud-resistant rather than "fraud proof": the customer experience stays simple, while the backend combines multi-signal identity continuity, rule-based risk scoring, synthetic data ML training, and admin review tools.
+## Key Features
 
-## What Problem It Solves
-
-- Gives customers a clean PDF generation workflow with account-based usage control.
-- Preserves a simple free tier without exposing internal fraud controls in the customer UI.
-- Helps internal reviewers detect repeated limit bypass attempts across cookies, storage resets, device fingerprints, behavior, and network signals.
-- Supports a reviewable path from explainable rules to candidate ML models.
-- Enables fraud-resistant cross-browser anonymous usage tracking by IP quota.
-
-## Main Features
-
-- **Anonymous Usage Control**: Two-PDF limit with fraud-resistant cross-browser tracking by IP quota
-- **Authentication & Authorization**: Customer signup, login, token refresh, logout, and account usage views
-- **Usage Limits**: Logged-in monthly usage limits by plan with synchronization across browsers
-- **Secure Access**: Secure PDF download with ownership checks
-- **Customer/Admin Separation**: Clean customer UI and protected admin system
-- **Admin Dashboard**: Full visibility into fraud metrics and user activity
-- **Fraud Detection**: 
-  - Fraud events and decision history
-  - Identity graph with confidence scoring
-  - Feature snapshots for debugging
-  - Rule engine with explainable scoring
-  - ML fraud engine with scikit-learn models
-- **ML Operations**:
-  - Synthetic fraud dataset generation
-  - Candidate model training, versioning, and activation
-  - Safe fallback to rule engine when no active model exists
-- **Operational Support**: Health, readiness, backup, and deployment scripts
-
-## Recent Changes (May 2026)
-
-### Anonymous Usage Tracking Improvements
-- ✅ **Finalized fraud-resistant shared anonymous usage tracking** (May 25)
-- ✅ **Cross-browser anonymous usage synchronization by IP quota** (May 25)
-- ✅ **Fixed shared anonymous usage tracking across browsers** (May 25)
-- Cleaned Python cache artifacts for production readiness
-- Pinned Python runtime to 3.11 for consistent Render deployments
-
-### Deployment & Hosting
-- ✅ **Prepared for free-tier hosting** (May 25)
-- ✅ **Database deployment ready** (May 25)
-- ✅ **Final commit - production deployable** (May 22)
-
-## Architecture Overview
-
-```
-project-root/
-  ├── frontend/                 # Customer-facing PDFCraft app
-  ├── pdfcraft-guardian-main/   # Internal admin dashboard
-  ├── backend/                  # FastAPI API, persistence, abuse-prevention, ML
-  ├── deploy/                   # Reverse proxy configuration (Nginx)
-  ├── scripts/                  # Operational checks and backup helpers
-  ├── docs/                     # Deployment, architecture, demo, and review docs
-  ├── docker-compose.yml        # Local development
-  ├── docker-compose.prod.yml   # Production configuration
-  ├── start.sh                  # Quick start script
-  └── stop.sh                   # Shutdown script
-```
-
-### Service Endpoints (Local Development)
-
-| Service | URL / Port |
-| --- | --- |
-| Customer frontend | `http://localhost:3025` |
-| Admin frontend | `http://localhost:3035/admin/login` |
-| Backend API | `http://localhost:8025` |
-| MongoDB host port | `27225` |
-| Redis host port | `6385` |
+- Anonymous two-PDF free limit with shared quota enforcement
+- Fraud-resistant shared usage tracking across browser resets, Incognito sessions, and Safari/private browsing
+- Browser and device continuity signals with dynamic IP tracking
+- VPN, proxy, and proxy-chain awareness in backend risk scoring
+- Redis-backed rate limiting for customer and admin flows
+- OTP email verification for new customer accounts
+- Admin monitoring for events, visitors, PDFs, audits, and model state
+- Customer-safe responses that avoid leaking internal fraud logic or infrastructure details
 
 ## Tech Stack
 
-| Layer | Technologies |
-| --- | --- |
-| **Backend** | FastAPI, Pydantic, MongoDB, Redis |
-| **Customer Frontend** | React, Vite, TypeScript |
-| **Admin Frontend** | React, Vite, TypeScript, TanStack Router |
-| **Deployment** | Docker Compose, Nginx |
-| **ML/Fraud** | scikit-learn, Random Forest, Logistic Regression, Isolation Forest |
-| **Language Composition** | Python (58.2%), TypeScript (39.6%), CSS (0.9%), Shell (0.6%), JavaScript (0.6%), Dockerfile (0.1%) |
+- Backend: FastAPI, Pydantic, Motor, MongoDB Atlas, Upstash Redis
+- Customer frontend: React, Vite, TypeScript
+- Admin frontend: React, Vite, TypeScript, TanStack Router
+- Deployment: Render for backend, Vercel for frontend apps
+- Fraud and analytics services: internal rule engine, identity linking, optional ML model pipeline
 
-## Free Hosting Option
+## Architecture Overview
 
-Recommended free-tier deployment split:
+- `frontend/` contains the customer-facing product.
+- `backend/` contains the FastAPI API, business logic, repositories, and fraud-resistant services.
+- `pdfcraft-guardian-main/` contains the internal admin dashboard.
+- MongoDB stores users, visitors, generated PDFs, verification records, refresh tokens, and audit data.
+- Redis is used for rate limiting and operational safeguards.
+- Gmail SMTP is used for OTP delivery in production.
 
-- **Customer Frontend**: Vercel (from `frontend/`)
-- **Admin Frontend**: Vercel (from `pdfcraft-guardian-main/`)
-- **Backend**: Render (from `backend/`)
-- **Database**: MongoDB Atlas M0 (free tier)
-- **Cache**: Upstash Redis (free tier)
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system diagram and request flows.
 
-This keeps local Docker development unchanged while allowing online review and demonstration without a VPS.
+## Repository Layout
+
+```text
+backend/
+  app/
+  tests/
+  scripts/
+  data/
+  requirements.txt
+  start_render.sh
+  .env.example
+  .env.production.example
+
+frontend/
+  src/
+  scripts/
+  package.json
+  vite.config.ts
+  .env.example
+  .env.production.example
+  vercel.json
+
+pdfcraft-guardian-main/
+  src/
+  package.json
+  vite.config.ts
+  .env.example
+  .env.production.example
+
+docs/
+  ARCHITECTURE.md
+  DEPLOYMENT.md
+  BUG_FIX_REPORT.md
+  LEAD_REPORT.md
+  DEMO_SCRIPT.md
+  INTERVIEW_EXPLANATION.md
+
+README.md
+docker-compose.yml
+docker-compose.prod.yml
+start.sh
+stop.sh
+reset.sh
+```
 
 ## Local Setup
 
-### Prerequisites
-- Docker and Docker Compose
+Prerequisites:
+
 - Python 3.11+
 - Node.js 18+
+- Docker with Compose
 
-### Getting Started
+Create local env files:
 
-1. **Copy environment files**:
 ```bash
 cp backend/.env.example backend/.env
 cp frontend/.env.example frontend/.env
 cp pdfcraft-guardian-main/.env.example pdfcraft-guardian-main/.env
 ```
 
-2. **Start the stack**:
+Start the local stack:
+
 ```bash
 ./start.sh
 ```
 
-3. **Access the applications**:
-- Customer app: `http://localhost:3025`
-- Admin app: `http://localhost:3035/admin/login`
-- API docs: `http://localhost:8025/docs` (when `ENABLE_API_DOCS=true`)
+Local URLs:
 
-4. **Stop the stack**:
+- Customer frontend: `http://localhost:3025`
+- Admin frontend: `http://localhost:3035/admin/login`
+- Backend API: `http://localhost:8025`
+- API docs: `http://localhost:8025/docs`
+
+Stop the stack:
+
 ```bash
 ./stop.sh
 ```
 
-## API Endpoints
+## Environment Variables
 
-- **Health check**: `http://localhost:8025/health`
-- **Readiness check**: `http://localhost:8025/ready`
-- **Public config**: `http://localhost:8025/api/public/config`
-- **API documentation**: `http://localhost:8025/docs` (when enabled)
+Backend highlights:
 
-## Customer Demo Flow
+- `MONGODB_URL`
+- `MONGODB_DB_NAME`
+- `REDIS_URL`
+- `JWT_SECRET_KEY`
+- `ADMIN_API_KEY`
+- `EMAIL_PROVIDER`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM_EMAIL`
+- `SMTP_FROM_NAME`
+- `SMTP_USE_TLS`
+- `EMAIL_VERIFICATION_OTP_TTL_MINUTES`
+- `EMAIL_VERIFICATION_MAX_ATTEMPTS`
+- `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS`
 
-1. Open the customer app at `http://localhost:3025`
-2. Generate two PDFs anonymously to test the limit
-3. Attempt a third PDF generation and confirm the login/signup gate
-4. Register a new account or log in
-5. Generate PDFs as an authenticated customer
-6. Explore customer features:
-   - `/usage` - View monthly usage quota
-   - `/history` - Review previously generated PDFs
-   - `/account` - Manage account settings
-7. Download a previously generated PDF
+Frontend highlights:
 
-*Note: Customer-facing screens and API responses do not expose fraud, ML, identity graph, or internal risk terminology.*
+- `VITE_API_BASE_URL`
+- `VITE_APP_NAME`
+- `VITE_APP_ENV`
 
-## Admin Demo Flow
+Only example files should be committed. Local `.env` files must stay untracked.
 
-1. Navigate to `http://localhost:3035/admin/login`
-2. Authenticate using the seeded admin account (or admin API key in local development)
-3. Explore the admin dashboard:
-   - **Dashboard**: Overview cards with fraud metrics
-   - **Events**: View recent fraud detection events
-   - **Visitors**: Analyze visitor profiles and identity links
-   - **PDFs**: Monitor PDF generation activity
-   - **Audit Logs**: Track all system and admin actions
-   - **ML Section**: Inspect active model and start candidate training
-4. Investigate specific visitors and review fraud decisions with reasoning
+## Running Backend and Frontend Separately
 
-## ML Fraud Engine Demo
-
-Generate synthetic fraud data and train a candidate model:
+Backend:
 
 ```bash
-# Generate synthetic fraud dataset
-docker exec -it fraud-pdf-backend python scripts/generate_synthetic_fraud_dataset.py
-
-# Train candidate ML models
-docker exec -it fraud-pdf-backend python scripts/train_fraud_models.py \
-  --synthetic-csv data/synthetic_fraud_dataset.csv \
-  --auto-activate=false
-
-# Run final demo verification
-docker exec -it fraud-pdf-backend python scripts/final_demo_check.py
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8025 --reload
 ```
 
-### Key ML Capabilities
+Customer frontend:
 
-- **Multi-Signal Identity**: Combines cookie, local storage, fingerprint, device profile, behavior, and IP signals
-- **Explainable Scoring**: Rule engine provides transparent fraud risk justification
-- **Synthetic Bootstrapping**: Generates realistic fraud scenarios for cold-start training
-- **Safe Model Activation**: Candidate review flow before promoting models to production
-- **Graceful Fallback**: Rule engine remains active if no ML model is deployed
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Admin frontend:
+
+```bash
+cd pdfcraft-guardian-main
+npm install
+npm run dev
+```
 
 ## Testing Commands
 
+Backend compile check:
+
 ```bash
-# Python syntax check
-python3 -m compileall -q backend/app backend/scripts backend/tests
-
-# Verify Docker configuration
-docker compose config
-docker compose -f docker-compose.prod.yml config
-
-# Run backend tests
-docker exec -it fraud-pdf-backend python -m pytest
-
-# Build frontend
-docker exec -it fraud-pdf-frontend npm run build
-docker exec -it fraud-pdf-admin-frontend npm run build
-
-# Check production environment
-python3 scripts/check_production_env.py --env backend/.env.production.example
+python3 -m compileall -q backend/app backend/tests
 ```
 
-## Recent Cleanup & Review Notes
+Backend tests in the running container:
 
-- ✅ Generated caches and build artifacts removed
-- ✅ Tracked local environment files cleaned
-- ✅ Windows metadata files excluded
-- ✅ Dead customer-frontend admin/TanStack routes removed
-- ✅ Separate admin app preserved at `pdfcraft-guardian-main/`
-- ✅ Local development ports maintained
-- ✅ Demo, documentation, and ML/fraud engine code retained for review
+```bash
+docker exec fraud-pdf-backend python -m pytest
+```
 
-For detailed cleanup information, see:
-- [CODE_REVIEW_READY.md](docs/CODE_REVIEW_READY.md) - Code review checklist
-- [CLEANUP_REPORT.md](docs/CLEANUP_REPORT.md) - Detailed cleanup actions
+Customer frontend build:
 
-## Security Notes
+```bash
+cd frontend && npm run build
+```
 
-⚠️ **Important Security Considerations**
+Customer forbidden-word scan:
 
-- Do not commit local `.env` files to version control
-- Replace all placeholder secrets before production deployment
-- Keep MongoDB and Redis private in production environments
-- Enable secure cookies and trusted proxy headers only in intended production topology
-- Keep internal fraud terminology out of the customer frontend
-- Admin dashboard stores credentials in `sessionStorage`, not in source code
-- Use environment variables for all sensitive configuration
-- Implement proper database backups and disaster recovery
+```bash
+cd frontend && node scripts/customer-ui-forbidden-scan.mjs
+```
 
-## Deployment Guide
+## Deployment
 
-### Production Deployment
+Production topology:
 
-For VPS + Docker Compose deployment: See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- Backend: Render
+- Customer frontend: Vercel
+- Admin frontend: Vercel
+- Database: MongoDB Atlas
+- Redis: Upstash Redis
+- Email: Gmail SMTP with an app password
 
-### Free Tier Deployment
+Deployment checklist:
 
-For free-tier review and demo hosting: See [docs/FREE_HOSTING.md](docs/FREE_HOSTING.md)
+1. Configure MongoDB Atlas and collect the connection string.
+2. Configure Upstash Redis and collect the `rediss://` connection URL.
+3. Set Render backend environment variables from `backend/.env.production.example`.
+4. Set Vercel frontend environment variables from `frontend/.env.production.example`.
+5. Set Vercel admin environment variables from `pdfcraft-guardian-main/.env.production.example`.
+6. Regenerate the Gmail app password if it was ever exposed, then update Render.
+7. Redeploy Render and Vercel after configuration changes.
 
-### Expected Production Domains
+Detailed instructions are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
-Update these placeholders in your deployment configuration:
+## Demo Flow
 
-- **Customer App**: `https://pdfcraft.yourdomain.com`
-- **Admin App**: `https://admin.pdfcraft.yourdomain.com`
-- **API Backend**: `https://api.pdfcraft.yourdomain.com`
+1. Open the customer app.
+2. Generate two PDFs anonymously.
+3. Confirm the third anonymous attempt is blocked behind signup/login.
+4. Register a customer account.
+5. Receive and submit the OTP verification code.
+6. Log in after verification.
+7. Generate a logged-in PDF and review history/usage.
+8. Open the admin dashboard and review the visitor, PDF, and audit views.
 
-## Known Limitations
+See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) for the step-by-step walkthrough.
 
-⚠️ **Current Limitations & Future Work**
+## Honest Limitations
 
-| Limitation | Impact | Planned Solution |
-| --- | --- | --- |
-| **Local Docker volumes** | Single-instance only; multi-instance needs shared storage | S3 or Cloudflare R2 object storage |
-| **Ephemeral file storage** | PDFs/models lost on Render redeploy | External object storage (S3/R2) |
-| **Client-side refresh tokens** | Security risk in strict production | Move to HttpOnly secure cookies |
-| **ML as decision support** | Should not be sole enforcement | Rule engine fallback (✓ implemented) |
-| **Manual model training** | Free hosting skips online retraining | Local training + manual artifact upload |
-| **Billing system** | Not yet implemented | Future enhancement |
+- PDFCraft is fraud-resistant, not impossible to bypass.
+- Email verification confirms email ownership, not unique human identity.
+- Stronger abuse defenses such as CAPTCHA, payments, reputation systems, or external device intelligence may still be required for high-risk production traffic.
+- Render-style ephemeral disk is not a long-term substitute for shared object storage if the product scales horizontally.
 
-## Next Improvements (Roadmap)
+## Related Documentation
 
-1. **Object Storage Integration**
-   - Move generated PDFs to S3/Cloudflare R2
-   - Enable horizontal scaling and multi-instance deployments
-   - Persist model artifacts across deployments
-
-2. **Security Hardening**
-   - Implement stronger secret management (Vault/AWS Secrets Manager)
-   - Add CI/CD checks for builds, tests, and forbidden terminology scans
-   - Enforce RBAC for admin access
-
-3. **Observability & Monitoring**
-   - Add distributed tracing for request debugging
-   - Monitor fraud decision drift over time
-   - Track model performance metrics and retraining needs
-   - Dashboard for fraud trends and anomalies
-
-4. **ML Enhancements**
-   - Scheduled automated retraining pipeline
-   - Model evaluation and A/B testing framework
-   - Advanced deep learning experiments (GPU support for autoencoders, sequence models)
-   - Federated learning for privacy-preserving training
-
-5. **Product Features**
-   - Implement customer billing and subscription management
-   - Enhanced analytics and usage reporting
-   - Advanced admin investigation tools
-   - Customer communication for blocked attempts
-
-## Documentation
-
-For detailed information, see:
-
-- **[LEAD_REPORT.md](docs/LEAD_REPORT.md)** - Comprehensive project overview and design decisions
-- **[INTERVIEW_EXPLANATION.md](docs/INTERVIEW_EXPLANATION.md)** - Interview Q&A and explanation
-- **[DEPLOYMENT.md](docs/DEPLOYMENT.md)** - Production deployment instructions
-- **[FREE_HOSTING.md](docs/FREE_HOSTING.md)** - Free tier hosting setup
-- **[CODE_REVIEW_READY.md](docs/CODE_REVIEW_READY.md)** - Code review checklist
-- **[CLEANUP_REPORT.md](docs/CLEANUP_REPORT.md)** - Detailed cleanup report
-
-## Contributing
-
-When submitting changes:
-
-1. Keep customer-facing UI free of fraud/ML terminology
-2. Update documentation for significant changes
-3. Add tests for new features
-4. Verify both local Docker setup and free-tier hosting path
-5. Run syntax checks before committing
-
-## License
-
-[Add your license information here]
-
-## Support & Questions
-
-For questions about deployment, architecture, or fraud detection logic, refer to the documentation in `docs/` or review the comments in the respective source files.
-
----
-
-**Last Updated**: May 26, 2026  
-**Latest Changes**: Finalized fraud-resistant cross-browser anonymous usage tracking with IP quota synchronization  
-**Repository**: [Shyam-2315/fraud-proof-pdf-platform](https://github.com/Shyam-2315/fraud-proof-pdf-platform)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- [docs/BUG_FIX_REPORT.md](docs/BUG_FIX_REPORT.md)
+- [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md)
+- [docs/LEAD_REPORT.md](docs/LEAD_REPORT.md)
+- [docs/INTERVIEW_EXPLANATION.md](docs/INTERVIEW_EXPLANATION.md)

@@ -51,7 +51,12 @@ def test_frontend_exposes_verify_email_route_and_api_calls() -> None:
     _require_frontend_source()
     auth_api_source = (FRONTEND_SRC / "api" / "authApi.ts").read_text(encoding="utf-8")
     app_source = (FRONTEND_SRC / "App.tsx").read_text(encoding="utf-8")
+    signup_source = (FRONTEND_SRC / "pages" / "SignupPage.tsx").read_text(encoding="utf-8")
+    verify_source = (FRONTEND_SRC / "pages" / "VerifyEmailPage.tsx").read_text(encoding="utf-8")
 
     assert '/api/auth/verify-email' in auth_api_source
     assert '/api/auth/resend-verification' in auth_api_source
+    assert "requires_verification" in auth_api_source
     assert 'path="/verify-email"' in app_source
+    assert '/verify-email?email=${encodeURIComponent(response.email)}' in signup_source
+    assert "setCooldown(60);" in verify_source

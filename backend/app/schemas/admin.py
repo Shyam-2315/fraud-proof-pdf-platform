@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel
+from pydantic import field_validator
+from email_validator import EmailNotValidError, validate_email
 
 
 class AdminDashboardResponse(BaseModel):
@@ -113,3 +115,33 @@ class AdminSystemHealthResponse(BaseModel):
     redis: str
     collections: dict[str, int]
     ports: dict[str, int]
+
+
+class AdminEmailStatusResponse(BaseModel):
+    provider: str
+    smtp_host: str
+    smtp_port: int
+    smtp_username_configured: bool
+    smtp_password_configured: bool
+    smtp_from_email: str
+    smtp_use_tls: bool
+    smtp_mode: str
+    ready: bool
+
+
+class AdminEmailTestRequest(BaseModel):
+    to: str
+
+    @field_validator("to")
+    @classmethod
+    def validate_to(cls, value: str) -> str:
+        try:
+            validated = validate_email(value, check_deliverability=False)
+        except EmailNotValidError as exc:
+            raise ValueError("Invalid email address.") from exc
+        return validated.normalized.strip().lower()
+
+
+class AdminEmailTestResponse(BaseModel):
+    success: bool = True
+    message: str

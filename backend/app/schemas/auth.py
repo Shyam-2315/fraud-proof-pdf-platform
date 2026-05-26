@@ -77,6 +77,7 @@ class UserResponse(BaseModel):
 
 class RegisterResponse(BaseModel):
     success: bool = True
+    requires_verification: bool = True
     message: str
     email: str
 

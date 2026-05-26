@@ -1,260 +1,177 @@
 # Deployment Guide
 
-## 1. Prerequisites
+## Production Topology
 
-- Ubuntu or comparable Linux VPS
-- Docker Engine with Compose plugin
-- DNS control for customer, admin, and API hostnames
-- TLS certificate strategy for Nginx or an external load balancer
-- Enough disk for MongoDB data, Redis persistence, generated PDFs, and model artifacts
+- Backend: Render
+- Customer frontend: Vercel
+- Admin frontend: Vercel
+- Database: MongoDB Atlas
+- Rate limiting: Upstash Redis
+- OTP email delivery: Gmail SMTP
 
-## 2. Server Requirements
+## Backend Environment Variables for Render
 
-Minimum practical baseline for a demo/staging VPS:
+Start from `backend/.env.production.example`.
 
-- 2 vCPU
-- 4 GB RAM
-- 40+ GB SSD
+Core backend:
 
-Recommended for broader internal review:
-
-- 4 vCPU
-- 8 GB RAM
-- 80+ GB SSD
-
-## 3. Environment Setup
-
-Create production env files from examples:
-
-```bash
-cp backend/.env.production.example backend/.env.production
-cp frontend/.env.production.example frontend/.env.production
-cp pdfcraft-guardian-main/.env.production.example pdfcraft-guardian-main/.env.production
-```
-
-Update placeholders before deployment:
-
-- `JWT_SECRET_KEY`
-- `ADMIN_API_KEY`
+- `APP_ENV=production`
+- `APP_NAME=PDFCraft`
+- `APP_PORT=8025`
 - `FRONTEND_URL`
 - `ADMIN_FRONTEND_URL`
 - `BACKEND_PUBLIC_URL`
 - `CORS_ORIGINS`
-- `DEFAULT_ADMIN_PASSWORD` if seeding stays enabled
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `SMTP_FROM_EMAIL`
+- `MONGODB_URL`
+- `MONGODB_DB_NAME`
+- `REDIS_URL`
+- `JWT_SECRET_KEY`
+- `ADMIN_API_KEY`
+- `SECURE_COOKIES=true`
+- `COOKIE_SAMESITE=none`
+- `TRUST_PROXY_HEADERS=true`
 
-Run the safety check:
-
-```bash
-python3 scripts/check_production_env.py --env backend/.env.production
-```
-
-## 4. Domain Setup
-
-Recommended hostnames:
-
-- Customer: `pdfcraft.yourdomain.com`
-- Admin: `admin.pdfcraft.yourdomain.com`
-- API: `api.pdfcraft.yourdomain.com`
-
-Point those DNS records to the VPS public IP before enabling TLS.
-
-## 5. Docker Production Deployment
-
-Validate the stack first:
-
-```bash
-docker compose -f docker-compose.prod.yml config
-```
-
-Start the production stack:
-
-```bash
-docker compose -f docker-compose.prod.yml up -d --build
-```
-
-Equivalent helper script:
-
-```bash
-./deploy-prod.sh
-```
-
-Follow logs:
-
-```bash
-docker compose -f docker-compose.prod.yml logs -f
-```
-
-## 6. Reverse Proxy
-
-Relevant files:
-
-- `deploy/nginx/nginx.conf`
-- `deploy/nginx/conf.d/pdfcraft.conf`
-
-Routing contract:
-
-- customer domain -> `frontend`
-- admin domain -> `admin-frontend`
-- API domain -> `backend`
-
-Forwarded headers configured:
-
-- `Host`
-- `X-Real-IP`
-- `X-Forwarded-For`
-- `X-Forwarded-Proto`
-
-`TRUST_PROXY_HEADERS=true` should only be enabled when the backend is actually running behind this trusted reverse proxy path.
-
-## 7. HTTPS / TLS
-
-The production compose file exposes ports `80` and `443` on the reverse proxy only.
-
-Recommended options:
-
-- Terminate TLS directly in Nginx and mount certificates into the proxy container.
-- Or terminate TLS at a cloud load balancer and keep Nginx private behind it.
-
-If terminating in Nginx, add `listen 443 ssl` server blocks and configure cert/key paths under `/etc/nginx/certs`.
-
-## 8. Database and Redis
-
-- MongoDB and Redis are internal-only in `docker-compose.prod.yml`.
-- They are not intended to be exposed on public host ports in production.
-- MongoDB indexes are created on backend startup.
-- Redis is used for rate limiting and should stay reachable by all backend instances.
-
-## 8a. Email Verification Setup
-
-Required backend environment variables for OTP email verification:
+Email verification and SMTP:
 
 - `EMAIL_PROVIDER=SMTP`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_USERNAME`
-- `SMTP_PASSWORD`
-- `SMTP_FROM_EMAIL`
+- `SMTP_HOST=smtp.gmail.com`
+- `SMTP_PORT=587`
+- `SMTP_USERNAME=your-gmail-account@gmail.com`
+- `SMTP_PASSWORD=REPLACE_WITH_ROTATED_GMAIL_APP_PASSWORD`
+- `SMTP_FROM_EMAIL=your-gmail-account@gmail.com`
 - `SMTP_FROM_NAME=PDFCraft`
 - `SMTP_USE_TLS=true`
 - `EMAIL_VERIFICATION_OTP_TTL_MINUTES=10`
 - `EMAIL_VERIFICATION_MAX_ATTEMPTS=5`
 - `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=60`
+- `AUTH_VERIFY_EMAIL_RATE_LIMIT=5/minute`
+- `AUTH_RESEND_VERIFICATION_RATE_LIMIT=3/hour`
+
+Fraud and usage controls:
+
+- `FREE_USAGE_LIMIT=2`
+- `ENABLE_SHARED_IP_ANON_QUOTA=true`
+- `ANON_SHARED_IP_FREE_LIMIT=2`
+- `ANON_IP_USAGE_WINDOW_HOURS=24`
 - `ENABLE_DISPOSABLE_EMAIL_BLOCK=true`
 - `ENABLE_EMAIL_MX_CHECK=false`
 
-Behavior notes:
+## Frontend Environment Variables for Vercel
 
-- In development, if SMTP is not configured, verification codes are logged to the backend console for local testing.
-- In production, registration/resend requests that need email delivery will fail safely if SMTP is not configured.
-- `ENABLE_EMAIL_MX_CHECK` is optional and should stay `false` unless outbound DNS is reliable in your runtime.
+Customer frontend:
 
-## 9. Storage
+- `VITE_API_BASE_URL`
+- `VITE_APP_NAME=PDFCraft`
+- `VITE_APP_ENV=production`
 
-Current production volumes:
+Admin frontend:
 
-- `fraud_pdf_mongo_data`
-- `fraud_pdf_redis_data`
-- `fraud_pdf_pdf_storage`
-- `fraud_pdf_model_storage`
-- `fraud_pdf_proxy_certs`
+- use the admin app example file in `pdfcraft-guardian-main/.env.production.example`
+- point it at the same backend origin as the customer frontend
 
-For horizontal scaling, move PDF output and model artifacts to shared/object storage.
+## MongoDB Atlas Setup
 
-## 10. Backups
+1. Create a MongoDB Atlas project and cluster.
+2. Create an application user with a strong password.
+3. Restrict network access to the Render backend as tightly as possible.
+4. Copy the connection string into `MONGODB_URL`.
+5. Set `MONGODB_DB_NAME` to the application database name.
 
-MongoDB backup:
+Operational note:
 
-```bash
-scripts/backup_mongo.sh
-```
+- Backend startup ensures the required indexes for users, visitors, OTP verification, PDFs, and fraud data.
 
-MongoDB restore:
+## Upstash Redis Setup
 
-```bash
-scripts/restore_mongo.sh backups/mongo/YYYYMMDD_HHMMSS/mongo.archive
-```
+1. Create a Redis database in Upstash.
+2. Copy the TLS connection string, typically `rediss://...`.
+3. Set that value as `REDIS_URL` in Render.
 
-PDF/model storage backup:
+Operational note:
 
-```bash
-scripts/backup_storage.sh
-```
+- Redis is used for rate limiting and should be considered part of the production control plane.
 
-## 11. Logs
+## Gmail SMTP Setup
 
-Local stack logs:
+1. Enable 2-Step Verification on the Gmail account.
+2. Create a new Gmail App Password for mail delivery.
+3. Use the rotated app password in Render.
+4. Paste the value without spaces.
 
-```bash
-./logs.sh
-```
+Critical security note:
 
-Production-focused logs:
+- A Gmail app password was exposed during prior debugging. Regenerate it in Google Account and update Render before final deployment.
 
-```bash
-scripts/logs.sh
-docker compose -f docker-compose.prod.yml logs -f reverse-proxy backend frontend admin-frontend
-```
+SMTP behavior implemented in the backend:
 
-## 12. Health Checks
+- Port `587` uses `SMTP + EHLO + STARTTLS + EHLO + LOGIN`
+- Port `465` uses `SMTP_SSL`
+- SMTP password logging is blocked
+- OTP logging is blocked in production
+- customers only see safe delivery failures
 
-Run after deployment:
+Admin diagnostics:
 
-```bash
-curl https://api.pdfcraft.your-domain.com/health
-curl https://api.pdfcraft.your-domain.com/ready
-```
+- `GET /api/admin/email/status`
+- `POST /api/admin/email/test`
 
-Useful local checks:
+These endpoints never return the SMTP password.
 
-```bash
-curl http://localhost:8025/health
-curl http://localhost:8025/ready
-curl http://localhost:8025/api/public/config
-```
+## Render Redeploy Steps
 
-## 13. Scaling Notes
+1. Update backend environment variables in Render.
+2. Save the service configuration.
+3. Trigger a redeploy of the latest backend commit.
+4. Confirm:
+   - `/health`
+   - `/ready`
+   - `/api/admin/email/status`
+5. Test signup and OTP delivery.
 
-- Backend application containers are stateless apart from MongoDB, Redis, PDF storage, and model storage.
-- Redis and MongoDB should move to managed or replicated deployments before serious scale-out.
-- Shared storage is required before running multiple backend replicas that must serve the same PDFs and active model artifacts.
-- Reverse-proxy and backend logging should move to centralized aggregation for long-running production use.
+## Vercel Redeploy Steps
 
-## 14. Rollback
+1. Update the customer frontend environment variables.
+2. Update the admin frontend environment variables if the admin app is deployed.
+3. Redeploy both projects.
+4. Prefer redeploying without build cache after significant environment or routing changes.
 
-1. Keep previous image tags or a previous repo revision available.
-2. Stop the current production stack:
+## Recommended Verification Flow After Deployment
 
-```bash
-docker compose -f docker-compose.prod.yml down
-```
+1. Sign up from the customer frontend.
+2. Confirm OTP email delivery.
+3. Verify the email code.
+4. Log in.
+5. Generate a logged-in PDF.
+6. Try login with an unverified account and confirm the verification prompt.
+7. Test resend verification.
+8. Check admin email status and a safe test email.
 
-3. Restore previous images, env files, or reverse-proxy config.
-4. Start again:
+## Rollback Strategy
 
-```bash
-docker compose -f docker-compose.prod.yml up -d
-```
+1. Keep the previous Render deploy available.
+2. Keep previous Vercel deployments available.
+3. If a release fails:
+   - roll back the backend
+   - roll back the customer frontend
+   - roll back the admin frontend if affected
+4. Re-run health, login, and OTP verification checks.
 
-5. Re-run health checks.
+## Troubleshooting
 
-## 15. Troubleshooting
+- OTP emails not arriving:
+  - verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`
+  - verify the Gmail app password was rotated and pasted correctly
+  - check `GET /api/admin/email/status`
 
-- `docker compose -f docker-compose.prod.yml config` fails:
-  Check missing env files, invalid YAML, or unresolved build args.
+- Frontend cannot reach backend:
+  - verify `VITE_API_BASE_URL`
+  - verify CORS settings in `CORS_ORIGINS`
 
-- `scripts/check_production_env.py` fails:
-  Replace placeholder secrets, remove localhost origins, and confirm HTTPS URLs.
+- Login works locally but not in production:
+  - check `SECURE_COOKIES`
+  - check `COOKIE_SAMESITE`
+  - check Render and Vercel origins
 
-- `/ready` fails:
-  Check MongoDB, Redis, storage volume permissions, and model directory mounts.
-
-- Customer or admin frontend cannot reach API:
-  Confirm `VITE_API_BASE_URL` in the respective production env file and verify Nginx API routing.
-
-- Client IPs look wrong in backend logs:
-  Confirm proxy forwarding headers and only then enable `TRUST_PROXY_HEADERS=true`.
+- Rate limiting behaves unexpectedly:
+  - verify Redis connectivity
+  - verify `REDIS_URL`

@@ -14,14 +14,7 @@ export class ApiError extends Error {
   body: unknown;
 
   constructor(status: number, body: unknown) {
-    const message =
-      typeof body === "object" && body
-        ? "message" in body
-          ? String((body as { message: unknown }).message)
-          : "detail" in body
-            ? String((body as { detail: unknown }).detail)
-            : `Request failed with ${status}`
-        : `Request failed with ${status}`;
+    const message = getApiErrorMessage(status, body);
     super(message);
     this.status = status;
     this.body = body;
@@ -37,6 +30,27 @@ async function parseResponse(response: Response) {
     return response.json();
   }
   return response.text();
+}
+
+function getApiErrorMessage(status: number, body: unknown): string {
+  if (typeof body === "object" && body) {
+    if ("message" in body && typeof (body as { message: unknown }).message === "string") {
+      return String((body as { message: unknown }).message);
+    }
+    if ("detail" in body && typeof (body as { detail: unknown }).detail === "string") {
+      return String((body as { detail: unknown }).detail);
+    }
+  }
+  if (status >= 500) {
+    return "Something went wrong. Please try again.";
+  }
+  if (status === 403) {
+    return "You do not have permission to do that.";
+  }
+  if (status === 404) {
+    return "We could not find what you requested.";
+  }
+  return "Request could not be completed.";
 }
 
 export async function customerRequest<T>(

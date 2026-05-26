@@ -68,6 +68,7 @@ def test_auth_register_login_refresh_logout_and_me() -> None:
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         registered = _register(client, email)
         assert registered["success"] is True
+        assert registered["requires_verification"] is True
         assert registered["message"] == "Account created. Please verify your email."
         assert registered["email"] == email
         assert "password_hash" not in str(registered)
@@ -90,7 +91,13 @@ def test_auth_register_login_refresh_logout_and_me() -> None:
             },
             headers=auth_headers,
         )
-        assert duplicate.status_code == 409
+        assert duplicate.status_code == 200
+        assert duplicate.json() == {
+            "success": True,
+            "requires_verification": True,
+            "message": "This email is already registered but not verified. We sent a new verification code.",
+            "email": email,
+        }
 
         wrong_login = client.post(
             "/api/auth/login",
@@ -108,6 +115,19 @@ def test_auth_register_login_refresh_logout_and_me() -> None:
         assert unverified_login.json()["detail"] == "Please verify your email before logging in."
 
         _mark_user_verified(email)
+        verified_duplicate = client.post(
+            "/api/auth/register",
+            json={
+                "email": email,
+                "full_name": "Duplicate",
+                "password": "StrongPassword123",
+            },
+            headers=auth_headers,
+        )
+        assert verified_duplicate.status_code == 409
+        assert verified_duplicate.json() == {
+            "detail": "This email is already registered. Please log in."
+        }
         login_body = _login(client, email)
 
         me = client.get("/api/auth/me", headers=_auth_header(login_body["access_token"]))
@@ -258,6 +278,20 @@ def test_admin_jwt_api_key_and_customer_rejection() -> None:
             headers={"X-Admin-API-Key": "wrong-key"},
         )
         assert wrong.status_code == 403
+
+
+def test_admin_email_status_never_returns_password() -> None:
+    with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
+        response = client.get(
+            "/api/admin/email/status",
+            headers={"X-Admin-API-Key": ADMIN_API_KEY},
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["provider"] == "SMTP"
+        assert "smtp_password_configured" in body
+        assert "smtp_password" not in body
+        assert "SMTP_PASSWORD" not in str(body)
 
 
 def test_validation_and_login_rate_limit() -> None:

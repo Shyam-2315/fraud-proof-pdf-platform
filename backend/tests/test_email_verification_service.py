@@ -130,7 +130,7 @@ def test_wrong_otp_increments_attempts(monkeypatch) -> None:
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(service.verify_email(email=user["email"], code="000000"))
 
-    assert exc_info.value.detail == "Invalid or expired verification code."
+    assert exc_info.value.detail == "Invalid verification code."
     assert repository.documents[-1]["attempts"] == 1
     assert repository.documents[-1]["consumed"] is False
 
@@ -146,7 +146,7 @@ def test_expired_otp_fails(monkeypatch) -> None:
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(service.verify_email(email=user["email"], code=sent_code))
 
-    assert exc_info.value.detail == "Invalid or expired verification code."
+    assert exc_info.value.detail == "Verification code has expired."
     assert repository.documents[-1]["consumed"] is True
 
 
@@ -161,7 +161,7 @@ def test_consumed_otp_cannot_be_reused(monkeypatch) -> None:
     with pytest.raises(HTTPException) as exc_info:
         asyncio.run(service.verify_email(email=user["email"], code=sent_code))
 
-    assert exc_info.value.detail == "Invalid or expired verification code."
+    assert exc_info.value.detail == "Invalid verification code."
     assert repository.documents[-1]["consumed"] is True
 
 
@@ -186,6 +186,21 @@ def test_resend_for_unknown_email_does_not_raise(monkeypatch) -> None:
 
     assert repository.documents == []
     assert email_service.sent_codes == []
+
+
+def test_wrong_otp_max_attempts_consumes_code(monkeypatch) -> None:
+    user = {"_id": "user-6", "email": "attempts@example.com", "email_verified": False, "is_verified": False}
+    service, repository, _, _ = _build_service(monkeypatch, [user])
+
+    asyncio.run(service.create_and_send_code(user_id=user["_id"], email=user["email"]))
+    repository.documents[-1]["attempts"] = 4
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(service.verify_email(email=user["email"], code="000000"))
+
+    assert exc_info.value.detail == "Too many verification attempts. Please request a new code."
+    assert repository.documents[-1]["attempts"] == 5
+    assert repository.documents[-1]["consumed"] is True
 
 
 def test_disposable_domain_is_rejected_when_block_enabled(monkeypatch) -> None:

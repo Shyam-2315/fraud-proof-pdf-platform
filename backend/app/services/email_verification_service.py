@@ -17,6 +17,10 @@ from app.utils.security import generate_uuid, utc_now
 
 logger = logging.getLogger(__name__)
 
+INVALID_CODE_MESSAGE = "Invalid verification code."
+EXPIRED_CODE_MESSAGE = "Verification code has expired."
+TOO_MANY_ATTEMPTS_MESSAGE = "Too many verification attempts. Please request a new code."
+
 
 class EmailVerificationService:
     def __init__(
@@ -78,38 +82,40 @@ class EmailVerificationService:
         normalized_email = self.normalize_and_validate_email(email)
         verification = await self.repository.find_latest_unconsumed_by_email(normalized_email)
         if verification is None:
-            raise self._invalid_code_error()
+            raise self._verification_error(INVALID_CODE_MESSAGE)
 
         if _as_utc(verification["expires_at"]) <= utc_now():
             await self.repository.mark_expired(verification["_id"])
-            raise self._invalid_code_error()
+            raise self._verification_error(EXPIRED_CODE_MESSAGE)
 
         attempts = int(verification.get("attempts", 0))
         if attempts >= self.settings.EMAIL_VERIFICATION_MAX_ATTEMPTS:
             await self.repository.consume(verification["_id"])
-            raise self._invalid_code_error()
+            raise self._verification_error(TOO_MANY_ATTEMPTS_MESSAGE)
 
         if not self.verify_code(code=code, code_hash=str(verification.get("code_hash", ""))):
             consume = attempts + 1 >= self.settings.EMAIL_VERIFICATION_MAX_ATTEMPTS
             await self.repository.increment_attempts(verification["_id"], consume=consume)
-            raise self._invalid_code_error()
+            if consume:
+                raise self._verification_error(TOO_MANY_ATTEMPTS_MESSAGE)
+            raise self._verification_error(INVALID_CODE_MESSAGE)
 
         user = await self.user_repository.find_by_id(str(verification["user_id"]))
         if user is None:
             await self.repository.consume(verification["_id"])
-            raise self._invalid_code_error()
+            raise self._verification_error(INVALID_CODE_MESSAGE)
 
         await self.user_repository.mark_email_verified(user_id=user["_id"])
         await self.repository.consume(verification["_id"])
 
-    async def resend_verification(self, *, email: str) -> None:
+    async def resend_verification(self, *, email: str, ignore_cooldown: bool = False) -> None:
         normalized_email = self.normalize_and_validate_email(email)
         user = await self.user_repository.find_by_email(normalized_email)
         if user is None or self.is_user_verified(user):
             return
 
         latest = await self.repository.find_latest_by_email(normalized_email)
-        if latest is not None:
+        if latest is not None and not ignore_cooldown:
             seconds_since_last = (utc_now() - _as_utc(latest["created_at"])).total_seconds()
             if seconds_since_last < self.settings.EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS:
                 return
@@ -131,10 +137,10 @@ class EmailVerificationService:
     def is_user_verified(self, user: dict) -> bool:
         return bool(user.get("email_verified", user.get("is_verified", False)))
 
-    def _invalid_code_error(self) -> HTTPException:
+    def _verification_error(self, message: str) -> HTTPException:
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification code.",
+            detail=message,
         )
 
 
