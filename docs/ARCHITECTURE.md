@@ -16,7 +16,7 @@ flowchart LR
   Admin[Admin Frontend<br/>Vercel or localhost:3035] --> API
   API --> Mongo[(MongoDB Atlas / local MongoDB)]
   API --> Redis[(Upstash Redis / local Redis)]
-  API --> SMTP[Gmail SMTP]
+  API --> SMTP[SMTP Provider]
   API --> Storage[Generated PDF storage]
   API --> Fraud[Fraud-resistant services]
 ```
@@ -109,7 +109,7 @@ Email verification is part of the customer auth lifecycle and is intentionally s
 1. Register request normalizes and validates email input.
 2. Backend creates an unverified user or resends a code for an existing unverified account.
 3. Email verification service generates a six-digit OTP and stores only its hash.
-4. Gmail SMTP sends the OTP email.
+4. The configured SMTP provider sends the OTP email.
 5. Verification checks the latest unconsumed record, expiry, and max attempts.
 6. On success, the user is marked `email_verified=true` and can then log in.
 
@@ -159,6 +159,6 @@ Production deployment is split by responsibility:
 - Vercel hosts the admin frontend
 - MongoDB Atlas provides persistent data storage
 - Upstash Redis provides rate limiting state
-- Gmail SMTP provides OTP delivery
+- A dedicated SMTP provider provides OTP delivery
 
 Detailed environment and rollout steps are documented in [DEPLOYMENT.md](DEPLOYMENT.md).

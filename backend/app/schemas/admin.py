@@ -119,13 +119,18 @@ class AdminSystemHealthResponse(BaseModel):
 
 class AdminEmailStatusResponse(BaseModel):
     provider: str
-    smtp_host: str
-    smtp_port: int
-    smtp_username_configured: bool
-    smtp_password_configured: bool
-    smtp_from_email: str
-    smtp_use_tls: bool
-    smtp_mode: str
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_username_configured: bool | None = None
+    smtp_password_configured: bool | None = None
+    smtp_from_email: str | None = None
+    smtp_use_tls: bool | None = None
+    smtp_use_ssl: bool | None = None
+    smtp_mode: str | None = None
+    brevo_api_key_configured: bool | None = None
+    brevo_from_email: str | None = None
+    brevo_from_name: str | None = None
+    delivery_mode: str | None = None
     ready: bool
 
 

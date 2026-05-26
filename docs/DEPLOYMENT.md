@@ -7,7 +7,7 @@
 - Admin frontend: Vercel
 - Database: MongoDB Atlas
 - Rate limiting: Upstash Redis
-- OTP email delivery: Gmail SMTP
+- OTP email delivery: Brevo transactional email API over HTTPS, with SMTP fallback support
 
 ## Backend Environment Variables for Render
 
@@ -31,21 +31,28 @@ Core backend:
 - `COOKIE_SAMESITE=none`
 - `TRUST_PROXY_HEADERS=true`
 
-Email verification and SMTP:
+Email verification and Brevo API:
 
-- `EMAIL_PROVIDER=SMTP`
-- `SMTP_HOST=smtp.gmail.com`
-- `SMTP_PORT=587`
-- `SMTP_USERNAME=your-gmail-account@gmail.com`
-- `SMTP_PASSWORD=REPLACE_WITH_ROTATED_GMAIL_APP_PASSWORD`
-- `SMTP_FROM_EMAIL=your-gmail-account@gmail.com`
-- `SMTP_FROM_NAME=PDFCraft`
-- `SMTP_USE_TLS=true`
+- `EMAIL_PROVIDER=BREVO_API`
+- `BREVO_API_KEY=<brevo api key>`
+- `BREVO_FROM_EMAIL=<verified sender email>`
+- `BREVO_FROM_NAME=PDFCraft`
 - `EMAIL_VERIFICATION_OTP_TTL_MINUTES=10`
 - `EMAIL_VERIFICATION_MAX_ATTEMPTS=5`
 - `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=60`
 - `AUTH_VERIFY_EMAIL_RATE_LIMIT=5/minute`
 - `AUTH_RESEND_VERIFICATION_RATE_LIMIT=3/hour`
+
+SMTP fallback:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM_EMAIL`
+- `SMTP_FROM_NAME`
+- `SMTP_USE_TLS`
+- `SMTP_USE_SSL`
 
 Fraud and usage controls:
 
@@ -91,21 +98,36 @@ Operational note:
 
 - Redis is used for rate limiting and should be considered part of the production control plane.
 
-## Gmail SMTP Setup
+## Production SMTP Recommendation
 
-1. Enable 2-Step Verification on the Gmail account.
-2. Create a new Gmail App Password for mail delivery.
-3. Use the rotated app password in Render.
-4. Paste the value without spaces.
+Use Brevo API over HTTPS for production OTP emails. Keep SMTP configured only as fallback if you need an emergency provider switch.
 
-Critical security note:
+Production note:
 
-- A Gmail app password was exposed during prior debugging. Regenerate it in Google Account and update Render before final deployment.
+- Gmail SMTP is not recommended for production Render deployment because connection attempts can fail from hosted environments.
+- Brevo SMTP on port `587` can also time out from hosted environments; the Brevo HTTPS API avoids that transport problem.
 
-SMTP behavior implemented in the backend:
+## Brevo API Setup
 
+1. Create a Brevo account.
+2. Verify the sender email or domain you want PDFCraft to send from.
+3. Generate a Brevo API key.
+4. Add these Render environment variables:
+
+```env
+EMAIL_PROVIDER=BREVO_API
+BREVO_API_KEY=<brevo api key>
+BREVO_FROM_EMAIL=<verified sender email>
+BREVO_FROM_NAME=PDFCraft
+```
+
+Delivery behavior implemented in the backend:
+
+- `BREVO_API` uses Brevo transactional email over HTTPS with a `10s` timeout
 - Port `587` uses `SMTP + EHLO + STARTTLS + EHLO + LOGIN`
 - Port `465` uses `SMTP_SSL`
+- Brevo API key logging is blocked
+- SMTP password whitespace is stripped before login
 - SMTP password logging is blocked
 - OTP logging is blocked in production
 - customers only see safe delivery failures
@@ -115,7 +137,7 @@ Admin diagnostics:
 - `GET /api/admin/email/status`
 - `POST /api/admin/email/test`
 
-These endpoints never return the SMTP password.
+These endpoints never return the SMTP password or the Brevo API key.
 
 ## Render Redeploy Steps
 
@@ -124,8 +146,8 @@ These endpoints never return the SMTP password.
 3. Trigger a redeploy of the latest backend commit.
 4. Confirm:
    - `/health`
-   - `/ready`
    - `/api/admin/email/status`
+   - `/api/admin/email/test`
 5. Test signup and OTP delivery.
 
 ## Vercel Redeploy Steps
@@ -159,9 +181,12 @@ These endpoints never return the SMTP password.
 ## Troubleshooting
 
 - OTP emails not arriving:
-  - verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`
-  - verify the Gmail app password was rotated and pasted correctly
+  - verify `EMAIL_PROVIDER`
+  - verify `BREVO_API_KEY` and `BREVO_FROM_EMAIL`
+  - verify the provider sender identity is approved
+  - if using SMTP fallback, verify `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL`
   - check `GET /api/admin/email/status`
+  - test `POST /api/admin/email/test`
 
 - Frontend cannot reach backend:
   - verify `VITE_API_BASE_URL`

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { resendVerification, verifyEmail } from "../api/authApi";
+import { getAuthErrorMessage, resendVerification, verifyEmail } from "../api/authApi";
 import ErrorState from "../components/ErrorState";
 import Footer from "../components/Footer";
 import Navbar from "../components/Navbar";
@@ -35,6 +35,8 @@ export default function VerifyEmailPage() {
     setEmail(initialEmail);
   }, [initialEmail]);
 
+  const otpDigits = useMemo(() => Array.from({ length: 6 }, (_, index) => code[index] || ""), [code]);
+  const canSubmit = email.trim().length > 0 && code.length === 6 && !verifying && !resending && !verified;
   const resendLabel = useMemo(() => {
     if (resending) return "Sending...";
     if (cooldown > 0) return `Resend in ${cooldown}s`;
@@ -43,6 +45,14 @@ export default function VerifyEmailPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (code.trim().length !== 6) {
+      setError("Enter the full 6-digit verification code.");
+      return;
+    }
     setVerifying(true);
     setError("");
     setMessage("");
@@ -62,13 +72,17 @@ export default function VerifyEmailPage() {
       }, 1600);
     } catch (err) {
       setVerified(false);
-      setError(err instanceof Error ? err.message : "Verification failed.");
+      setError(getAuthErrorMessage(err, "Verification could not be completed."));
     } finally {
       setVerifying(false);
     }
   }
 
   async function handleResend() {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
     setResending(true);
     setError("");
     setMessage("");
@@ -77,7 +91,7 @@ export default function VerifyEmailPage() {
       setMessage(response.message);
       setCooldown(60);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to resend code.");
+      setError(getAuthErrorMessage(err, "A new code could not be sent right now."));
     } finally {
       setResending(false);
     }
@@ -127,36 +141,55 @@ export default function VerifyEmailPage() {
                 className="field"
                 type="email"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (error) setError("");
+                }}
                 required
                 autoComplete="email"
               />
             </label>
             <label className="mb-5 block">
               <span className="mb-2 block text-sm font-black text-[#21324e]">Verification code</span>
-              <input
-                className="field text-center text-lg font-black"
-                inputMode="numeric"
-                maxLength={6}
-                pattern="[0-9]{6}"
-                value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
-                required
-                style={{ letterSpacing: "0.45em" }}
-              />
+              <div className="relative">
+                <input
+                  className="otp-input-overlay"
+                  inputMode="numeric"
+                  maxLength={6}
+                  pattern="[0-9]{6}"
+                  value={code}
+                  onChange={(event) => {
+                    setCode(event.target.value.replace(/\D/g, "").slice(0, 6));
+                    if (error) setError("");
+                  }}
+                  placeholder="123456"
+                  required
+                  autoComplete="one-time-code"
+                  aria-label="6-digit verification code"
+                />
+                <div className="otp-grid" aria-hidden="true">
+                  {otpDigits.map((digit, index) => (
+                    <div
+                      key={index}
+                      className={`otp-slot ${digit ? "otp-slot-filled" : ""} ${index === code.length && !verified ? "otp-slot-active" : ""}`}
+                    >
+                      {digit || " "}
+                    </div>
+                  ))}
+                </div>
+              </div>
               <span className="mt-2 block text-xs font-semibold text-[#6a7d99]">
                 Enter the latest 6-digit code sent to your email.
               </span>
             </label>
             <div className="flex flex-wrap gap-3">
-              <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-70" disabled={verifying || resending || verified}>
+              <button className="btn-primary disabled:cursor-not-allowed disabled:opacity-70" disabled={!canSubmit}>
                 {verifying ? "Verifying..." : "Verify Email"}
               </button>
               <button
                 className="btn-secondary disabled:cursor-not-allowed disabled:opacity-70"
                 type="button"
-                disabled={verifying || resending || cooldown > 0}
+                disabled={verifying || resending || cooldown > 0 || verified}
                 onClick={() => void handleResend()}
               >
                 {resendLabel}

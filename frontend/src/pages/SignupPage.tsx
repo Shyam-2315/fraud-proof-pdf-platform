@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useState } from "react";
 import { sendBehaviorEvent } from "../api/userApi";
+import { getAuthErrorMessage } from "../api/authApi";
 
 export default function SignupPage() {
   const { signup } = useAuth();
@@ -37,6 +38,14 @@ export default function SignupPage() {
           </p>
         </section>
         <section>
+          <div className="mb-4 rounded-[24px] border border-[#dce7f8] bg-white/85 p-4 shadow-[0_18px_60px_rgba(16,33,63,0.05)] backdrop-blur">
+            <div className="text-xs font-black uppercase text-[#5b79aa]" style={{ letterSpacing: "0.22em" }}>
+              Secure signup
+            </div>
+            <div className="mt-2 text-sm font-semibold text-[#4a5f82]">
+              After account creation, PDFCraft sends a 6-digit verification code and redirects you to the confirmation screen.
+            </div>
+          </div>
           {error ? <div className="mb-4"><ErrorState message={error} /></div> : null}
           <AuthForm
             mode="signup"
@@ -55,7 +64,7 @@ export default function SignupPage() {
                   },
                 });
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Signup failed.");
+                setError(getAuthErrorMessage(err, "Signup could not be completed."));
               }
             }}
           />

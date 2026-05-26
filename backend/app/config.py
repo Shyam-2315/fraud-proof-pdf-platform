@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "PDFCraft"
     SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    BREVO_API_KEY: str = ""
+    BREVO_FROM_EMAIL: str = ""
+    BREVO_FROM_NAME: str = "PDFCraft"
     EMAIL_VERIFICATION_OTP_TTL_MINUTES: int = 10
     EMAIL_VERIFICATION_MAX_ATTEMPTS: int = 5
     EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS: int = 60
@@ -112,11 +116,26 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
-    @field_validator("SMTP_HOST", "SMTP_USERNAME", "SMTP_FROM_EMAIL", "SMTP_FROM_NAME", mode="before")
+    @field_validator(
+        "SMTP_HOST",
+        "SMTP_USERNAME",
+        "SMTP_FROM_EMAIL",
+        "SMTP_FROM_NAME",
+        "BREVO_FROM_EMAIL",
+        "BREVO_FROM_NAME",
+        mode="before",
+    )
     @classmethod
     def strip_smtp_text_fields(cls, value: Any) -> Any:
         if isinstance(value, str):
             return value.strip()
+        return value
+
+    @field_validator("EMAIL_PROVIDER", mode="before")
+    @classmethod
+    def normalize_email_provider(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip().upper()
         return value
 
     @field_validator("SMTP_PASSWORD", mode="before")
@@ -124,6 +143,13 @@ class Settings(BaseSettings):
     def normalize_smtp_password(cls, value: Any) -> Any:
         if isinstance(value, str):
             return "".join(value.split())
+        return value
+
+    @field_validator("BREVO_API_KEY", mode="before")
+    @classmethod
+    def normalize_brevo_api_key(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return value.strip()
         return value
 
     @field_validator("COOKIE_SAMESITE")

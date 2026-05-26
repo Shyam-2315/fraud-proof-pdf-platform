@@ -28,7 +28,7 @@ PDFCraft is a fraud-resistant PDF generation SaaS with a customer-facing app, a 
 - `pdfcraft-guardian-main/` contains the internal admin dashboard.
 - MongoDB stores users, visitors, generated PDFs, verification records, refresh tokens, and audit data.
 - Redis is used for rate limiting and operational safeguards.
-- Gmail SMTP is used for OTP delivery in production.
+- Production OTP delivery should use Brevo API over HTTPS when possible, with SMTP available as fallback.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system diagram and request flows.
 
@@ -122,6 +122,9 @@ Backend highlights:
 - `JWT_SECRET_KEY`
 - `ADMIN_API_KEY`
 - `EMAIL_PROVIDER`
+- `BREVO_API_KEY`
+- `BREVO_FROM_EMAIL`
+- `BREVO_FROM_NAME`
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_USERNAME`
@@ -129,6 +132,7 @@ Backend highlights:
 - `SMTP_FROM_EMAIL`
 - `SMTP_FROM_NAME`
 - `SMTP_USE_TLS`
+- `SMTP_USE_SSL`
 - `EMAIL_VERIFICATION_OTP_TTL_MINUTES`
 - `EMAIL_VERIFICATION_MAX_ATTEMPTS`
 - `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS`
@@ -202,7 +206,7 @@ Production topology:
 - Admin frontend: Vercel
 - Database: MongoDB Atlas
 - Redis: Upstash Redis
-- Email: Gmail SMTP with an app password
+- Email: Brevo HTTP API over HTTPS, with SMTP fallback support
 
 Deployment checklist:
 
@@ -211,7 +215,7 @@ Deployment checklist:
 3. Set Render backend environment variables from `backend/.env.production.example`.
 4. Set Vercel frontend environment variables from `frontend/.env.production.example`.
 5. Set Vercel admin environment variables from `pdfcraft-guardian-main/.env.production.example`.
-6. Regenerate the Gmail app password if it was ever exposed, then update Render.
+6. Configure the Brevo API key and verified sender in Render. Use SMTP only as fallback if HTTPS delivery is unavailable.
 7. Redeploy Render and Vercel after configuration changes.
 
 Detailed instructions are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).

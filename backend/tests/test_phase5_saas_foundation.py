@@ -288,10 +288,12 @@ def test_admin_email_status_never_returns_password() -> None:
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["provider"] == "SMTP"
+        assert body["provider"] in {"SMTP", "BREVO_API"}
         assert "smtp_password_configured" in body
+        assert "smtp_use_ssl" in body
         assert "smtp_password" not in body
         assert "SMTP_PASSWORD" not in str(body)
+        assert "BREVO_API_KEY" not in str(body)
 
 
 def test_validation_and_login_rate_limit() -> None:

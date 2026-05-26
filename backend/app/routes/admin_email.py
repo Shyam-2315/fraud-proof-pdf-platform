@@ -18,7 +18,7 @@ email_service = EmailService()
 rate_limit_service = RateLimitService()
 
 
-@router.get("/status", response_model=AdminEmailStatusResponse)
+@router.get("/status", response_model=AdminEmailStatusResponse, response_model_exclude_none=True)
 async def email_status(request: Request) -> AdminEmailStatusResponse:
     await _enforce_admin_rate_limit(request)
     return AdminEmailStatusResponse(**email_service.get_status())

@@ -28,8 +28,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       return;
     }
-    const currentUser = await authApi.me();
-    setUser(currentUser);
+    try {
+      const currentUser = await authApi.me();
+      setUser(currentUser);
+    } catch (error) {
+      clearAuthTokens();
+      setUser(null);
+      throw error;
+    }
   }
 
   useEffect(() => {
@@ -37,8 +43,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         await refreshUser();
       } catch {
-        clearAuthTokens();
-        setUser(null);
       } finally {
         setLoading(false);
       }

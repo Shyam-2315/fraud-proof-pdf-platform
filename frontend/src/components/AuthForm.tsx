@@ -20,10 +20,16 @@ export default function AuthForm({
   }, [initialEmail]);
 
   function validate() {
-    if (mode === "signup" && !fullName.trim()) {
+    const normalizedName = fullName.trim();
+    const normalizedEmail = email.trim();
+
+    if (mode === "signup" && !normalizedName) {
       return "Full name is required.";
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    if (mode === "signup" && normalizedName.length < 2) {
+      return "Full name must be at least 2 characters.";
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       return "Please enter a valid email address.";
     }
     if (!password) {

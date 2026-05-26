@@ -1,4 +1,4 @@
-import { customerRequest } from "./client";
+import { ApiError, customerRequest } from "./client";
 
 export type AuthUser = {
   id: string;
@@ -77,4 +77,19 @@ export type AccountUsage = {
 
 export function getAccountUsage() {
   return customerRequest<AccountUsage>("/api/account/usage");
+}
+
+export function getAuthErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    if (typeof error.message === "string" && error.message.trim()) {
+      return error.message;
+    }
+    if (error.status === 503) {
+      return "Email delivery is temporarily unavailable. Please try again in a moment.";
+    }
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+  return fallback;
 }

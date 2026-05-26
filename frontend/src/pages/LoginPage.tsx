@@ -6,6 +6,7 @@ import Navbar from "../components/Navbar";
 import { useAuth } from "../context/AuthContext";
 import { useState } from "react";
 import { sendBehaviorEvent } from "../api/userApi";
+import { getAuthErrorMessage } from "../api/authApi";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -43,6 +44,14 @@ export default function LoginPage() {
               {state.flashMessage}
             </div>
           ) : null}
+          <div className="mb-4 rounded-[24px] border border-[#dce7f8] bg-white/85 p-4 shadow-[0_18px_60px_rgba(16,33,63,0.05)] backdrop-blur">
+            <div className="text-xs font-black uppercase text-[#5b79aa]" style={{ letterSpacing: "0.22em" }}>
+              Account access
+            </div>
+            <div className="mt-2 text-sm font-semibold text-[#4a5f82]">
+              Verified accounts can log in immediately. Pending accounts can jump back to email verification without starting over.
+            </div>
+          </div>
           {error ? <div className="mb-4"><ErrorState message={error} /></div> : null}
           {error === "Please verify your email before logging in." && pendingEmail ? (
             <div className="mb-4 rounded-lg border border-[#ffe2a8] bg-[#fff6df] p-4 text-sm font-bold text-[#765000]">
@@ -66,7 +75,7 @@ export default function LoginPage() {
                 await login(email, password);
                 navigate(state?.from || "/account", { replace: true });
               } catch (err) {
-                setError(err instanceof Error ? err.message : "Login failed.");
+                setError(getAuthErrorMessage(err, "Login could not be completed."));
               }
             }}
           />
