@@ -41,6 +41,11 @@ Update placeholders before deployment:
 - `BACKEND_PUBLIC_URL`
 - `CORS_ORIGINS`
 - `DEFAULT_ADMIN_PASSWORD` if seeding stays enabled
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM_EMAIL`
 
 Run the safety check:
 
@@ -123,6 +128,30 @@ If terminating in Nginx, add `listen 443 ssl` server blocks and configure cert/k
 - They are not intended to be exposed on public host ports in production.
 - MongoDB indexes are created on backend startup.
 - Redis is used for rate limiting and should stay reachable by all backend instances.
+
+## 8a. Email Verification Setup
+
+Required backend environment variables for OTP email verification:
+
+- `EMAIL_PROVIDER=SMTP`
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USERNAME`
+- `SMTP_PASSWORD`
+- `SMTP_FROM_EMAIL`
+- `SMTP_FROM_NAME=PDFCraft`
+- `SMTP_USE_TLS=true`
+- `EMAIL_VERIFICATION_OTP_TTL_MINUTES=10`
+- `EMAIL_VERIFICATION_MAX_ATTEMPTS=5`
+- `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS=60`
+- `ENABLE_DISPOSABLE_EMAIL_BLOCK=true`
+- `ENABLE_EMAIL_MX_CHECK=false`
+
+Behavior notes:
+
+- In development, if SMTP is not configured, verification codes are logged to the backend console for local testing.
+- In production, registration/resend requests that need email delivery will fail safely if SMTP is not configured.
+- `ENABLE_EMAIL_MX_CHECK` is optional and should stay `false` unless outbound DNS is reliable in your runtime.
 
 ## 9. Storage
 

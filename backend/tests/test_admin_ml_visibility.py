@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import httpx
@@ -29,6 +30,31 @@ def _register(client: httpx.Client) -> dict:
             "full_name": "Customer Test",
             "password": "StrongPassword123",
         },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _mark_user_verified(email: str) -> None:
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+    db.users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email_verified": True,
+                "email_verified_at": datetime.now(UTC),
+                "is_verified": True,
+            }
+        },
+    )
+
+
+def _login(client: httpx.Client, email: str) -> dict:
+    response = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": "StrongPassword123"},
+        headers={"X-Forwarded-For": f"203.0.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"},
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -124,7 +150,9 @@ def test_admin_can_access_ml_models_and_fraud_visibility_endpoints() -> None:
 
 def test_customer_cannot_access_admin_ml_endpoints() -> None:
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
-        customer = _register(client)
+        registered = _register(client)
+        _mark_user_verified(registered["email"])
+        customer = _login(client, registered["email"])
         headers = _auth_header(customer["access_token"])
 
         models = client.get("/api/admin/ml/models", headers=headers)

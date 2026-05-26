@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import httpx
@@ -34,15 +35,51 @@ def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _mark_user_verified(email: str) -> None:
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+    db.users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email_verified": True,
+                "email_verified_at": datetime.now(UTC),
+                "is_verified": True,
+            }
+        },
+    )
+
+
+def _login(client: httpx.Client, email: str, password: str = "StrongPassword123") -> dict:
+    response = client.post(
+        "/api/auth/login",
+        json={"email": email, "password": password},
+        headers={"X-Forwarded-For": f"198.51.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
 def test_auth_register_login_refresh_logout_and_me() -> None:
     email = _email("auth")
     auth_headers = {"X-Forwarded-For": f"198.51.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"}
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         registered = _register(client, email)
         assert registered["success"] is True
-        assert registered["user"]["role"] == "CUSTOMER"
-        assert registered["user"]["plan"] == "FREE"
+        assert registered["message"] == "Account created. Please verify your email."
+        assert registered["email"] == email
         assert "password_hash" not in str(registered)
+        assert "access_token" not in registered
+
+        created_user = db.users.find_one({"email": email})
+        assert created_user is not None
+        assert created_user["email_verified"] is False
+        assert created_user["email_verified_at"] is None
+        otp_record = db.email_verifications.find_one({"email": email})
+        assert otp_record is not None
+        assert "123456" not in str(otp_record)
 
         duplicate = client.post(
             "/api/auth/register",
@@ -62,13 +99,16 @@ def test_auth_register_login_refresh_logout_and_me() -> None:
         )
         assert wrong_login.status_code == 401
 
-        login = client.post(
+        unverified_login = client.post(
             "/api/auth/login",
             json={"email": email, "password": "StrongPassword123"},
             headers=auth_headers,
         )
-        assert login.status_code == 200
-        login_body = login.json()
+        assert unverified_login.status_code == 403
+        assert unverified_login.json()["detail"] == "Please verify your email before logging in."
+
+        _mark_user_verified(email)
+        login_body = _login(client, email)
 
         me = client.get("/api/auth/me", headers=_auth_header(login_body["access_token"]))
         assert me.status_code == 200
@@ -95,8 +135,10 @@ def test_auth_register_login_refresh_logout_and_me() -> None:
 
 def test_authenticated_usage_history_and_download_ownership() -> None:
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
-        user_a = _register(client, _email("owner"))
-        token_a = user_a["access_token"]
+        email_a = _email("owner")
+        _register(client, email_a)
+        _mark_user_verified(email_a)
+        token_a = _login(client, email_a)["access_token"]
 
         pdf_ids = []
         for index in range(5):
@@ -135,7 +177,10 @@ def test_authenticated_usage_history_and_download_ownership() -> None:
         assert download.status_code == 200
         assert download.headers["content-type"].startswith("application/pdf")
 
-        user_b = _register(client, _email("other"))
+        email_b = _email("other")
+        _register(client, email_b)
+        _mark_user_verified(email_b)
+        user_b = _login(client, email_b)
         forbidden = client.get(
             f"/api/pdf/download/{pdf_ids[0]}",
             headers=_auth_header(user_b["access_token"]),
@@ -147,7 +192,10 @@ def test_plan_limits_can_be_changed_for_pro_and_business() -> None:
     mongo = MongoClient(TEST_MONGO_URL)
     db = mongo[TEST_MONGO_DB_NAME]
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
-        user = _register(client, _email("plan"))
+        email = _email("plan")
+        _register(client, email)
+        _mark_user_verified(email)
+        user = _login(client, email)
         user_id = user["user"]["id"]
         db.users.update_one({"_id": user_id}, {"$set": {"plan": "PRO"}})
         pro = client.post(
@@ -170,7 +218,10 @@ def test_plan_limits_can_be_changed_for_pro_and_business() -> None:
 
 def test_admin_jwt_api_key_and_customer_rejection() -> None:
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
-        customer = _register(client, _email("notadmin"))
+        email = _email("notadmin")
+        _register(client, email)
+        _mark_user_verified(email)
+        customer = _login(client, email)
         denied = client.get(
             "/api/admin/fraud/summary",
             headers=_auth_header(customer["access_token"]),

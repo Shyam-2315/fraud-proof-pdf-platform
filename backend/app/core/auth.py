@@ -126,4 +126,9 @@ async def _load_current_user(token: str) -> dict[str, Any]:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is disabled.",
         )
+    if not bool(user.get("email_verified", user.get("is_verified", False))):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please verify your email to continue.",
+        )
     return user

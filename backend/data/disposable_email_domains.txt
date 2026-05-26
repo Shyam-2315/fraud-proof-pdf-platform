@@ -1,0 +1,11 @@
+# Common disposable email providers blocked for demo safety.
+10minutemail.com
+20minutemail.com
+dispostable.com
+fakeinbox.com
+guerrillamail.com
+maildrop.cc
+mailinator.com
+tempmail.com
+temp-mail.org
+yopmail.com

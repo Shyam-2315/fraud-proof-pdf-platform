@@ -18,12 +18,17 @@ from app.schemas.auth import (
     AuthResponse,
     LogoutRequest,
     MeResponse,
+    RegisterResponse,
     RefreshTokenRequest,
+    ResendVerificationRequest,
     TokenRefreshResponse,
     UserLoginRequest,
     UserRegisterRequest,
     UserResponse,
+    VerificationResponse,
+    VerifyEmailRequest,
 )
+from app.services.email_verification_service import EmailVerificationService
 from app.services.fraud_event_service import FraudEventService
 from app.services.fraud_service import FraudService
 from app.fraud_engine.decision_engine import FraudEngineDecisionService
@@ -43,6 +48,7 @@ class AuthService:
         identity_link_repository: IdentityLinkRepository | None = None,
         token_service: TokenService | None = None,
         fraud_engine_decision_service: FraudEngineDecisionService | None = None,
+        email_verification_service: EmailVerificationService | None = None,
     ) -> None:
         self.user_repository = user_repository or UserRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
@@ -52,6 +58,9 @@ class AuthService:
         self.identity_link_repository = identity_link_repository or IdentityLinkRepository()
         self.token_service = token_service or TokenService()
         self.fraud_engine_decision_service = fraud_engine_decision_service or FraudEngineDecisionService()
+        self.email_verification_service = email_verification_service or EmailVerificationService(
+            user_repository=self.user_repository
+        )
 
     def build_user_response(self, user: dict[str, Any]) -> UserResponse:
         return build_user_response(user)
@@ -60,8 +69,8 @@ class AuthService:
         self,
         payload: UserRegisterRequest,
         request: Request,
-    ) -> AuthResponse:
-        email = _normalize_email(str(payload.email))
+    ) -> RegisterResponse:
+        email = self.email_verification_service.normalize_and_validate_email(str(payload.email))
         existing_user = await self.user_repository.find_by_email(email)
         if existing_user is not None:
             raise HTTPException(
@@ -79,6 +88,8 @@ class AuthService:
             "plan": UserPlan.FREE.value,
             "is_active": True,
             "is_verified": False,
+            "email_verified": False,
+            "email_verified_at": None,
             "created_at": now,
             "updated_at": now,
             "last_login_at": None,
@@ -102,7 +113,12 @@ class AuthService:
             is_registration=True,
         )
         user = linked_user or user
-        return await self._build_auth_response(user, "Account created successfully.")
+        await self.email_verification_service.create_and_send_code(user_id=user["_id"], email=email)
+        return RegisterResponse(
+            success=True,
+            message="Account created. Please verify your email.",
+            email=email,
+        )
 
     async def login_user(
         self,
@@ -120,6 +136,11 @@ class AuthService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User account is disabled.",
+            )
+        if not _is_email_verified(user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email before logging in.",
             )
 
         updated_user = await self.user_repository.update_last_login(user["_id"])
@@ -143,6 +164,23 @@ class AuthService:
             role=user.role,
             plan=user.plan,
             is_active=user.is_active,
+        )
+
+    async def verify_email(self, payload: VerifyEmailRequest) -> VerificationResponse:
+        await self.email_verification_service.verify_email(email=payload.email, code=payload.code)
+        return VerificationResponse(
+            success=True,
+            message="Email verified successfully.",
+        )
+
+    async def resend_verification(
+        self,
+        payload: ResendVerificationRequest,
+    ) -> VerificationResponse:
+        await self.email_verification_service.resend_verification(email=payload.email)
+        return VerificationResponse(
+            success=True,
+            message="If this email is registered, a verification code has been sent.",
         )
 
     async def refresh(self, payload: RefreshTokenRequest) -> TokenRefreshResponse:
@@ -351,13 +389,17 @@ def build_user_response(user: dict[str, Any]) -> UserResponse:
         role=user.get("role", UserRole.CUSTOMER.value),
         plan=user.get("plan", UserPlan.FREE.value),
         is_active=bool(user.get("is_active", False)),
-        is_verified=bool(user.get("is_verified", False)),
+        is_verified=_is_email_verified(user),
         created_at=user.get("created_at"),
     )
 
 
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
+
+
+def _is_email_verified(user: dict[str, Any]) -> bool:
+    return bool(user.get("email_verified", user.get("is_verified", False)))
 
 
 def _last(values: list[Any]) -> Any:

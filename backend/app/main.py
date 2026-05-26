@@ -16,6 +16,7 @@ from app.repositories.fraud_event_repository import ensure_fraud_event_indexes
 from app.repositories.fraud_engine_repository import ensure_fraud_engine_indexes
 from app.repositories.fraud_repository import ensure_fraud_indexes
 from app.repositories.behavior_repository import ensure_behavior_indexes
+from app.repositories.email_verification_repository import ensure_email_verification_indexes
 from app.repositories.identity_repository import ensure_identity_link_indexes
 from app.repositories.pdf_repository import ensure_pdf_indexes
 from app.repositories.refresh_token_repository import ensure_refresh_token_indexes
@@ -87,6 +88,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await ensure_pdf_indexes()
         await ensure_user_indexes()
         await ensure_refresh_token_indexes()
+        await ensure_email_verification_indexes()
         await ensure_user_usage_indexes()
         await ensure_fraud_indexes()
         await ensure_fraud_event_indexes()

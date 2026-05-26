@@ -12,6 +12,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [error, setError] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
   const state = location.state as { from?: string } | null;
 
   return (
@@ -29,11 +30,21 @@ export default function LoginPage() {
         </section>
         <section>
           {error ? <div className="mb-4"><ErrorState message={error} /></div> : null}
+          {error === "Please verify your email before logging in." && pendingEmail ? (
+            <div className="mb-4 rounded-lg border border-[#ffe2a8] bg-[#fff6df] p-4 text-sm font-bold text-[#765000]">
+              Please verify your email before logging in.{" "}
+              <Link className="text-[#1459d9]" to={`/verify-email?email=${encodeURIComponent(pendingEmail)}`}>
+                Verify now
+              </Link>
+              .
+            </div>
+          ) : null}
           <AuthForm
             mode="login"
             onSubmit={async ({ email, password }) => {
               try {
                 void sendBehaviorEvent("LOGIN_CLICKED");
+                setPendingEmail(email);
                 await login(email, password);
                 navigate(state?.from || "/account", { replace: true });
               } catch (err) {

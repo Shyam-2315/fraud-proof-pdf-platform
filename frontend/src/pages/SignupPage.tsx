@@ -34,8 +34,11 @@ export default function SignupPage() {
             onSubmit={async ({ full_name, email, password }) => {
               try {
                 void sendBehaviorEvent("SIGNUP_CLICKED");
-                await signup(full_name, email, password);
-                navigate(state?.from || "/account", { replace: true });
+                const response = await signup(full_name, email, password);
+                navigate(`/verify-email?email=${encodeURIComponent(response.email)}`, {
+                  replace: true,
+                  state: { email: response.email, from: state?.from },
+                });
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Signup failed.");
               }

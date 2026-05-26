@@ -14,7 +14,15 @@ export class ApiError extends Error {
   body: unknown;
 
   constructor(status: number, body: unknown) {
-    super(typeof body === "object" && body && "message" in body ? String((body as { message: unknown }).message) : `Request failed with ${status}`);
+    const message =
+      typeof body === "object" && body
+        ? "message" in body
+          ? String((body as { message: unknown }).message)
+          : "detail" in body
+            ? String((body as { detail: unknown }).detail)
+            : `Request failed with ${status}`
+        : `Request failed with ${status}`;
+    super(message);
     this.status = status;
     this.body = body;
   }

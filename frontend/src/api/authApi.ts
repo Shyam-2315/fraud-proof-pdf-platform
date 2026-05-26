@@ -11,6 +11,12 @@ export type AuthUser = {
   is_verified?: boolean;
 };
 
+export type RegisterResponse = {
+  success: boolean;
+  message: string;
+  email: string;
+};
+
 export type AuthResponse = {
   success: boolean;
   message: string;
@@ -21,7 +27,7 @@ export type AuthResponse = {
 };
 
 export function register(payload: { email: string; full_name: string; password: string }) {
-  return customerRequest<AuthResponse>("/api/auth/register", {
+  return customerRequest<RegisterResponse>("/api/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -43,6 +49,20 @@ export function logout(refreshToken: string) {
 
 export function me() {
   return customerRequest<AuthUser>("/api/auth/me");
+}
+
+export function verifyEmail(payload: { email: string; code: string }) {
+  return customerRequest<{ success: boolean; message: string }>("/api/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resendVerification(payload: { email: string }) {
+  return customerRequest<{ success: boolean; message: string }>("/api/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export type AccountUsage = {

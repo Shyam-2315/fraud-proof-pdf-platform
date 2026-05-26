@@ -12,7 +12,7 @@ type AuthContextValue = {
   loading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<authApi.AuthUser>;
-  signup: (full_name: string, email: string, password: string) => Promise<authApi.AuthUser>;
+  signup: (full_name: string, email: string, password: string) => Promise<authApi.RegisterResponse>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 };
@@ -58,10 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return response.user;
       },
       async signup(full_name, email, password) {
-        const response = await authApi.register({ full_name, email, password });
-        setAuthTokens(response.access_token, response.refresh_token);
-        setUser(response.user);
-        return response.user;
+        return authApi.register({ full_name, email, password });
       },
       async logout() {
         const refreshToken = getRefreshToken();

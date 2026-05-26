@@ -1,4 +1,5 @@
 import os
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import httpx
@@ -140,6 +141,21 @@ def _generate(client: httpx.Client, title: str) -> httpx.Response:
     return client.post(
         "/api/pdf/generate",
         json={"title": title, "content": f"{title} body"},
+    )
+
+
+def _mark_user_verified(email: str) -> None:
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+    db.users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "email_verified": True,
+                "email_verified_at": datetime.now(UTC),
+                "is_verified": True,
+            }
+        },
     )
 
 
@@ -618,7 +634,14 @@ def test_logged_in_user_can_generate_after_anonymous_block() -> None:
             },
         )
         assert register.status_code == 200, register.text
-        token = register.json()["access_token"]
+        email = register.json()["email"]
+        _mark_user_verified(email)
+        login = client.post(
+            "/api/auth/login",
+            json={"email": email, "password": "StrongPassword123"},
+        )
+        assert login.status_code == 200, login.text
+        token = login.json()["access_token"]
 
         authed = client.post(
             "/api/pdf/generate",

@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
+from email_validator import EmailNotValidError, validate_email
 
 
 class UserRegisterRequest(BaseModel):
@@ -11,10 +12,7 @@ class UserRegisterRequest(BaseModel):
     @field_validator("email")
     @classmethod
     def validate_email(cls, value: str) -> str:
-        value = value.strip().lower()
-        if "@" not in value or value.startswith("@") or value.endswith("@"):
-            raise ValueError("Invalid email address.")
-        return value
+        return _normalize_email(value)
 
 
 class UserLoginRequest(BaseModel):
@@ -28,6 +26,33 @@ class UserLoginRequest(BaseModel):
         if "@" not in value or value.startswith("@") or value.endswith("@"):
             raise ValueError("Invalid email address.")
         return value
+
+
+class VerifyEmailRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    code: str = Field(min_length=6, max_length=6)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return _normalize_email(value)
+
+    @field_validator("code")
+    @classmethod
+    def validate_code(cls, value: str) -> str:
+        normalized = value.strip()
+        if len(normalized) != 6 or not normalized.isdigit():
+            raise ValueError("Verification code must be 6 digits.")
+        return normalized
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return _normalize_email(value)
 
 
 class RefreshTokenRequest(BaseModel):
@@ -48,6 +73,12 @@ class UserResponse(BaseModel):
     is_active: bool
     is_verified: bool
     created_at: datetime | None = None
+
+
+class RegisterResponse(BaseModel):
+    success: bool = True
+    message: str
+    email: str
 
 
 class AuthResponse(BaseModel):
@@ -73,3 +104,16 @@ class MeResponse(BaseModel):
     role: str
     plan: str
     is_active: bool
+
+
+class VerificationResponse(BaseModel):
+    success: bool = True
+    message: str
+
+
+def _normalize_email(value: str) -> str:
+    try:
+        validated = validate_email(value, check_deliverability=False)
+    except EmailNotValidError as exc:
+        raise ValueError("Invalid email address.") from exc
+    return validated.normalized.strip().lower()

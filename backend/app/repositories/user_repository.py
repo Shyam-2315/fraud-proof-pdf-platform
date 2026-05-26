@@ -46,6 +46,21 @@ class UserRepository:
             return_document=ReturnDocument.AFTER,
         )
 
+    async def mark_email_verified(self, user_id: str) -> dict[str, Any] | None:
+        now = utc_now()
+        return await self.get_collection().find_one_and_update(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "email_verified": True,
+                    "email_verified_at": now,
+                    "is_verified": True,
+                    "updated_at": now,
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+
     async def link_visitor(
         self,
         user_id: str,
@@ -139,6 +154,10 @@ async def ensure_user_indexes() -> None:
         unique=True,
     )
     await collection.create_index(
+        [("email_verified", ASCENDING)],
+        name="idx_users_email_verified",
+    )
+    await collection.create_index(
         [("created_at", ASCENDING)],
         name="idx_users_created_at",
     )
@@ -193,6 +212,8 @@ async def seed_default_admin() -> None:
             "plan": UserPlan.BUSINESS.value,
             "is_active": True,
             "is_verified": True,
+            "email_verified": True,
+            "email_verified_at": now,
             "created_at": now,
             "updated_at": now,
             "last_login_at": None,

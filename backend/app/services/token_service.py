@@ -47,6 +47,12 @@ class TokenService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token.",
             )
+        if not bool(user.get("email_verified", user.get("is_verified", False))):
+            await self.refresh_token_repository.revoke_by_id(token_record["_id"])
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Please verify your email to continue.",
+            )
         await self.refresh_token_repository.revoke_by_id(token_record["_id"])
         return await self.create_token_pair(user)
 

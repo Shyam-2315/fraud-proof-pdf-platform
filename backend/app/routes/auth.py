@@ -6,10 +6,14 @@ from app.schemas.auth import (
     AuthResponse,
     LogoutRequest,
     MeResponse,
+    RegisterResponse,
     RefreshTokenRequest,
+    ResendVerificationRequest,
     TokenRefreshResponse,
     UserLoginRequest,
     UserRegisterRequest,
+    VerificationResponse,
+    VerifyEmailRequest,
 )
 from app.services.auth_service import AuthService
 from app.services.rate_limit_service import RateLimitService, client_ip
@@ -20,11 +24,11 @@ rate_limit_service = RateLimitService()
 settings = get_settings()
 
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", response_model=RegisterResponse)
 async def register(
     payload: UserRegisterRequest,
     request: Request,
-) -> AuthResponse:
+) -> RegisterResponse:
     await rate_limit_service.check(
         request,
         bucket="auth_register",
@@ -46,6 +50,34 @@ async def login(
         rate=settings.AUTH_LOGIN_RATE_LIMIT,
     )
     return await auth_service.login_user(payload=payload, request=request)
+
+
+@router.post("/verify-email", response_model=VerificationResponse)
+async def verify_email(
+    payload: VerifyEmailRequest,
+    request: Request,
+) -> VerificationResponse:
+    await rate_limit_service.check(
+        request,
+        bucket="auth_verify_email",
+        identifier=f"{client_ip(request)}:{payload.email}",
+        rate=settings.AUTH_VERIFY_EMAIL_RATE_LIMIT,
+    )
+    return await auth_service.verify_email(payload=payload)
+
+
+@router.post("/resend-verification", response_model=VerificationResponse)
+async def resend_verification(
+    payload: ResendVerificationRequest,
+    request: Request,
+) -> VerificationResponse:
+    await rate_limit_service.check(
+        request,
+        bucket="auth_resend_verification",
+        identifier=f"{client_ip(request)}:{payload.email}",
+        rate=settings.AUTH_RESEND_VERIFICATION_RATE_LIMIT,
+    )
+    return await auth_service.resend_verification(payload=payload)
 
 
 @router.post("/refresh", response_model=TokenRefreshResponse)

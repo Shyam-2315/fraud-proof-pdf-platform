@@ -313,7 +313,7 @@ class AdminService:
             email=str(user.get("email", "")),
             full_name=user.get("full_name"),
             is_active=bool(user.get("is_active", False)),
-            is_verified=bool(user.get("is_verified", False)),
+            is_verified=bool(user.get("email_verified", user.get("is_verified", False))),
             linked_visitor_count=len(user.get("linked_visitor_ids", [])),
             pdf_count=pdf_count,
             created_at=_datetime_or_now(user.get("created_at")),
