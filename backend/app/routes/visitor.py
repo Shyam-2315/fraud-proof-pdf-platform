@@ -3,20 +3,15 @@ from time import perf_counter
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
-from app.core.public_config import (
-    CUSTOMER_COOKIE_NAME,
-    LOGIN_REQUIRED_MESSAGE,
-    customer_cookie_options,
-)
+from app.core.public_config import CUSTOMER_COOKIE_NAME, customer_cookie_options
 from app.schemas.visitor import (
     VisitorIdentifyRequest,
     VisitorIdentifyResponse,
     VisitorStatusResponse,
 )
 from app.services.anonymous_usage_service import AnonymousUsageService
-from app.services.visitor_service import VisitorService
 from app.services.rate_limit_service import RateLimitService, client_ip
-from app.utils.request_utils import get_normalized_client_ip
+from app.services.visitor_service import VisitorService
 
 router = APIRouter(prefix="/api/visitor", tags=["Visitor"])
 visitor_service = VisitorService()
@@ -81,19 +76,21 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
                 detail="We could not start your session. Please refresh and try again.",
             )
 
-        usage_summary = await anonymous_usage_service.build_shared_usage_summary(
+        usage_status = await anonymous_usage_service.get_anonymous_usage_status(
+            request=request,
             visitor=visitor,
-            ip_address=get_normalized_client_ip(request),
         )
-        shared_limit_reached = usage_summary["remaining_free_uses"] <= 0
-        is_blocked = bool(visitor.get("is_blocked", False)) or shared_limit_reached
-        requires_login = is_blocked
         return VisitorStatusResponse(
             visitor_id=visitor["_id"],
-            **usage_summary,
-            is_blocked=is_blocked,
-            message=LOGIN_REQUIRED_MESSAGE if requires_login else None,
-            requires_login=requires_login,
+            used=int(usage_status["used"]),
+            remaining=int(usage_status["remaining"]),
+            free_limit=int(usage_status["free_limit"]),
+            free_usage_count=int(usage_status["free_usage_count"]),
+            free_usage_limit=int(usage_status["free_usage_limit"]),
+            remaining_free_uses=int(usage_status["remaining_free_uses"]),
+            is_blocked=bool(usage_status["is_blocked"]),
+            message=usage_status["message"],
+            requires_login=bool(usage_status["requires_login"]),
         )
     finally:
         duration_ms = (perf_counter() - started_at) * 1000

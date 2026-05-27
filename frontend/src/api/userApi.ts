@@ -9,6 +9,9 @@ export type PublicConfig = {
 
 export type VisitorStatus = {
   visitor_id: string;
+  used: number;
+  remaining: number;
+  free_limit: number;
   free_usage_count: number;
   free_usage_limit: number;
   remaining_free_uses: number;

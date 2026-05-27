@@ -16,6 +16,7 @@ import LoadingState from "../components/LoadingState";
 import Navbar from "../components/Navbar";
 import PdfForm, { type PdfFormValues } from "../components/PdfForm";
 import UsageCard from "../components/UsageCard";
+import { useAuth } from "../context/AuthContext";
 import { getIdentityHeaders } from "../utils/visitorIdentity";
 
 export default function GeneratePage() {
@@ -26,18 +27,24 @@ export default function GeneratePage() {
   const [lastPdf, setLastPdf] = useState<{ pdf_id: string; file_name?: string } | null>(null);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   async function refreshStatus() {
     const nextStatus = await getVisitorStatusAfterIdentify();
     setStatus(nextStatus);
+    return nextStatus;
   }
 
   useEffect(() => {
     async function load() {
       try {
-        await ensureVisitorIdentified();
         await sendBehaviorEvent("PAGE_VIEW", { page: "generate" });
-        await refreshStatus();
+        if (!isAuthenticated) {
+          await ensureVisitorIdentified();
+          await refreshStatus();
+        } else {
+          setStatus(null);
+        }
       } catch (err) {
         if (err instanceof ApiError && (err.status === 401 || err.status === 404)) {
           setError("We could not start your session. Please refresh and try again.");
@@ -49,10 +56,16 @@ export default function GeneratePage() {
       }
     }
     load();
-  }, []);
+  }, [isAuthenticated]);
 
   async function submit(values: PdfFormValues) {
     if (generating) return;
+    if (!isAuthenticated && status?.is_blocked) {
+      setMessage("");
+      setError(status.message || "Free limit reached. Please log in to continue.");
+      setShowLoginPrompt(true);
+      return;
+    }
     setError("");
     setMessage("");
     setLastPdf(null);
@@ -63,24 +76,15 @@ export default function GeneratePage() {
       const result = await generatePdf(values);
       setMessage(result.message || "PDF generated successfully.");
       if (result.pdf_id) setLastPdf({ pdf_id: result.pdf_id, file_name: result.file_name });
-      setStatus((current) => ({
-        visitor_id: current?.visitor_id || "",
-        free_usage_count: result.free_usage_count ?? current?.free_usage_count ?? 0,
-        free_usage_limit: result.free_usage_limit ?? current?.free_usage_limit ?? 2,
-        remaining_free_uses: result.remaining_free_uses ?? current?.remaining_free_uses ?? 0,
-        is_blocked: Boolean(result.requires_login),
-        message: null,
-        requires_login: Boolean(result.requires_login),
-      }));
+      if (!isAuthenticated) await refreshStatus();
     } catch (err) {
       if (err instanceof ApiError && (err.status === 401 || err.status === 403 || err.status === 404)) {
         const body = err.body as Partial<GeneratePdfResponse>;
         setMessage("");
-        setError(body.message || "Free limit reached. Please log in to continue.");
-        if (body.requires_login) setShowLoginPrompt(true);
-        try {
-          await refreshStatus();
-        } catch {
+        const refreshedStatus = isAuthenticated ? null : await refreshStatus().catch(() => null);
+        setError(body.message || refreshedStatus?.message || "Free limit reached. Please log in to continue.");
+        if (body.requires_login || refreshedStatus?.is_blocked) setShowLoginPrompt(true);
+        if (!isAuthenticated && refreshedStatus === null) {
           setError("We could not start your session. Please refresh and try again.");
         }
         return;
@@ -135,9 +139,15 @@ export default function GeneratePage() {
                 ) : null}
               </div>
             ) : null}
-            <PdfForm disabled={generating} onSubmit={submit} />
+            <PdfForm disabled={generating || (!isAuthenticated && Boolean(status?.is_blocked))} onSubmit={submit} />
           </div>
-          <aside>{loading ? <LoadingState label="Loading usage..." /> : <UsageCard status={status} />}</aside>
+          <aside>
+            {loading ? (
+              <LoadingState label="Loading usage..." />
+            ) : (
+              <UsageCard status={status} showLoginCta={!isAuthenticated && Boolean(status?.is_blocked)} />
+            )}
+          </aside>
         </div>
       </main>
       <Footer />

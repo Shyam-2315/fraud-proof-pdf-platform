@@ -45,6 +45,9 @@ class VisitorIdentifyResponse(BaseModel):
 
 class VisitorStatusResponse(BaseModel):
     visitor_id: str
+    used: int
+    remaining: int
+    free_limit: int
     free_usage_count: int
     free_usage_limit: int
     remaining_free_uses: int

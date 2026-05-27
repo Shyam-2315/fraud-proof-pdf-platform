@@ -1,9 +1,16 @@
+import logging
 from datetime import timedelta
 from typing import Any
 
+from fastapi import Request
+
 from app.config import get_settings
+from app.core.public_config import LOGIN_REQUIRED_MESSAGE
 from app.repositories.anonymous_ip_usage_repository import AnonymousIPUsageRepository
+from app.utils.request_utils import get_normalized_client_ip
 from app.utils.security import normalize_ip, utc_now
+
+logger = logging.getLogger(__name__)
 
 
 class AnonymousUsageService:
@@ -39,12 +46,12 @@ class AnonymousUsageService:
         anon_id: str | None = None,
         fingerprint_hash: str | None = None,
         user_agent: str | None = None,
-    ) -> None:
+    ) -> dict[str, Any] | None:
         normalized_ip = normalize_ip(ip_address)
         if not normalized_ip or normalized_ip == "unknown":
-            return
+            return None
         window_start = self._window_start()
-        await self.repository.upsert_usage_window(
+        return await self.repository.upsert_usage_window(
             ip_address=normalized_ip,
             now=window_start,
             window_start=window_start,
@@ -112,4 +119,74 @@ class AnonymousUsageService:
             "free_usage_count": int(snapshot["free_usage_count"]),
             "free_usage_limit": int(snapshot["free_usage_limit"]),
             "remaining_free_uses": int(snapshot["remaining_free_uses"]),
+        }
+
+    async def get_anonymous_usage_status(
+        self,
+        *,
+        request: Request,
+        visitor: dict[str, Any] | None,
+        active_window: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        normalized_ip = get_normalized_client_ip(request)
+        snapshot = await self.get_shared_usage_snapshot(
+            visitor=visitor,
+            ip_address=normalized_ip,
+            active_window=active_window,
+        )
+        visitor_usage_count = int(snapshot["visitor_usage_count"])
+        ip_usage_count = int(snapshot["ip_usage_count"])
+        fingerprint_hash = request.headers.get("X-Device-Fingerprint")
+        device_profile_hash = request.headers.get("X-Device-Profile-Hash")
+        fingerprint_usage_count = (
+            visitor_usage_count
+            if fingerprint_hash and fingerprint_hash in (visitor or {}).get("fingerprint_hashes", [])
+            else 0
+        )
+        device_usage_count = (
+            visitor_usage_count
+            if device_profile_hash and device_profile_hash in (visitor or {}).get("device_profile_hashes", [])
+            else 0
+        )
+        used = max(
+            visitor_usage_count,
+            ip_usage_count,
+            device_usage_count,
+            fingerprint_usage_count,
+        )
+        free_limit = int(snapshot["free_usage_limit"])
+        remaining = max(free_limit - used, 0)
+        visitor_is_blocked = bool((visitor or {}).get("is_blocked", False))
+        is_blocked = visitor_is_blocked or used >= free_limit
+        message = LOGIN_REQUIRED_MESSAGE if is_blocked else None
+
+        log = logger.info if is_blocked or ip_usage_count > 0 or used != visitor_usage_count else logger.debug
+        log(
+            "Anonymous usage status visitor_id=%s ip=%s visitor_usage=%s ip_usage=%s device_usage=%s fingerprint_usage=%s used=%s remaining=%s is_blocked=%s",
+            (visitor or {}).get("_id"),
+            normalized_ip,
+            visitor_usage_count,
+            ip_usage_count,
+            device_usage_count,
+            fingerprint_usage_count,
+            used,
+            remaining,
+            is_blocked,
+        )
+
+        return {
+            "used": used,
+            "remaining": remaining,
+            "free_limit": free_limit,
+            "free_usage_count": used,
+            "free_usage_limit": free_limit,
+            "remaining_free_uses": remaining,
+            "visitor_usage_count": visitor_usage_count,
+            "ip_usage_count": ip_usage_count,
+            "device_usage_count": device_usage_count,
+            "fingerprint_usage_count": fingerprint_usage_count,
+            "is_blocked": is_blocked,
+            "message": message,
+            "requires_login": is_blocked,
+            "active_window": snapshot.get("active_window"),
         }

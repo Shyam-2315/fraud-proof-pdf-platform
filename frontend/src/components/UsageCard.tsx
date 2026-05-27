@@ -1,10 +1,17 @@
 import { BarChart3 } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { VisitorStatus } from "../api/userApi";
 
-export default function UsageCard({ status }: { status: VisitorStatus | null }) {
-  const used = status?.free_usage_count ?? 0;
-  const limit = status?.free_usage_limit ?? 2;
-  const remaining = status?.remaining_free_uses ?? limit;
+export default function UsageCard({
+  status,
+  showLoginCta = false,
+}: {
+  status: VisitorStatus | null;
+  showLoginCta?: boolean;
+}) {
+  const used = status?.used ?? status?.free_usage_count ?? 0;
+  const limit = status?.free_limit ?? status?.free_usage_limit ?? 2;
+  const remaining = status?.remaining ?? status?.remaining_free_uses ?? limit;
   const percent = Math.min(100, Math.round((used / Math.max(limit, 1)) * 100));
 
   return (
@@ -37,6 +44,17 @@ export default function UsageCard({ status }: { status: VisitorStatus | null }) 
       <div className="mt-5 h-3 overflow-hidden rounded-full bg-[#e8eef7]">
         <div className="h-full rounded-full bg-[#1459d9]" style={{ width: `${percent}%` }} />
       </div>
+      {showLoginCta ? (
+        <div className="mt-5 rounded-lg border border-[#f0d58a] bg-[#fff8e4] p-4">
+          <p className="text-sm font-bold text-[#765000]">
+            Free limit reached. Please log in to continue.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Link className="btn-primary" state={{ from: "/generate" }} to="/login">Login</Link>
+            <Link className="btn-secondary" state={{ from: "/generate" }} to="/signup">Sign Up</Link>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

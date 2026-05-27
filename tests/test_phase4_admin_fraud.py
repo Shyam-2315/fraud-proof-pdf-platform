@@ -90,8 +90,11 @@ def test_customer_flow_is_pdfcraft_safe_and_admin_is_protected() -> None:
         status = client.get("/api/visitor/status")
         assert status.status_code == 200
         status_body = status.json()
+        assert status_body["used"] == 0
+        assert status_body["remaining"] == 2
+        assert status_body["free_limit"] == 2
         assert status_body["remaining_free_uses"] == 2
-        assert "free PDF generation" in status_body["message"]
+        assert status_body["message"] is None
         _assert_customer_safe(status_body)
 
         first_pdf = _generate_pdf(client, "Customer PDF 1", "First free PDF")
@@ -131,6 +134,9 @@ def test_customer_flow_is_pdfcraft_safe_and_admin_is_protected() -> None:
         blocked_status = client.get("/api/visitor/status")
         assert blocked_status.status_code == 200
         blocked_status_body = blocked_status.json()
+        assert blocked_status_body["used"] == 2
+        assert blocked_status_body["remaining"] == 0
+        assert blocked_status_body["free_limit"] == 2
         assert blocked_status_body["is_blocked"] is True
         assert blocked_status_body["requires_login"] is True
         assert blocked_status_body["message"] == (

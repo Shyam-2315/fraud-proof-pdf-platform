@@ -111,12 +111,12 @@ class PDFService:
         anon_id = request.headers.get("X-Anon-Id") or get_visitor_cookie(request.cookies)
         fingerprint_hash = request.headers.get("X-Device-Fingerprint")
         user_agent = request.headers.get("user-agent")
-        shared_usage_snapshot = await self.anonymous_usage_service.get_shared_usage_snapshot(
+        anonymous_usage_status = await self.anonymous_usage_service.get_anonymous_usage_status(
+            request=request,
             visitor=visitor,
-            ip_address=ip_address,
         )
-        shared_used = int(shared_usage_snapshot["free_usage_count"])
-        shared_limit = int(shared_usage_snapshot["free_usage_limit"])
+        shared_used = int(anonymous_usage_status["used"])
+        shared_limit = int(anonymous_usage_status["free_limit"])
         if shared_used >= shared_limit:
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
@@ -126,16 +126,20 @@ class PDFService:
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_limit_response(message="Free limit reached. Please log in to continue."),
+                detail=_build_limit_response(
+                    message="Free limit reached. Please log in to continue.",
+                    free_limit=shared_limit,
+                    used=shared_used,
+                ),
             )
 
-        active_window = shared_usage_snapshot.get("active_window")
+        active_window = anonymous_usage_status.get("active_window")
         ip_intelligence = await self.ip_intelligence.lookup(ip_address)
         behavior_summary = await self._behavior_summary(visitor["_id"])
         risk_decision = self.risk_engine.decide(
             {
-                "visitor_usage_count": int(shared_usage_snapshot["visitor_usage_count"]),
-                "shared_ip_usage_count": int((active_window or {}).get("anonymous_pdf_count", 0)),
+                "visitor_usage_count": int(anonymous_usage_status["visitor_usage_count"]),
+                "shared_ip_usage_count": int(anonymous_usage_status["ip_usage_count"]),
                 "shared_usage_count": shared_used,
                 "anon_shared_limit": shared_limit,
                 "unique_visitors_from_ip": len((active_window or {}).get("visitor_ids", [])),
@@ -249,7 +253,10 @@ class PDFService:
             if block_reason == "FREE_LIMIT_REACHED":
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=_build_limit_response(),
+                    detail=_build_limit_response(
+                        free_limit=shared_limit,
+                        used=shared_used,
+                    ),
                 )
             await self.fraud_event_service.create_from_request(
                 request=request,
@@ -278,67 +285,6 @@ class PDFService:
                         self.settings.FREE_USAGE_LIMIT,
                     ),
                 ),
-            )
-
-        if shared_used >= shared_limit:
-            await self.fraud_event_service.create_from_request(
-                request=request,
-                visitor=visitor,
-                event_type=AdminFraudEventType.PDF_GENERATION_BLOCKED.value,
-                severity=AdminFraudSeverity.HIGH.value,
-                action="PDF generation blocked.",
-                allowed=False,
-                reason="FREE_LIMIT_REACHED",
-                metadata={"title": payload.title},
-            )
-            await self.fraud_event_service.create_from_request(
-                request=request,
-                visitor=visitor,
-                event_type=AdminFraudEventType.FREE_LIMIT_REACHED.value,
-                severity=AdminFraudSeverity.HIGH.value,
-                action="Anonymous free usage limit reached.",
-                allowed=False,
-                reason="FREE_LIMIT_REACHED",
-                metadata={
-                    "free_usage_count": shared_used,
-                    "free_usage_limit": shared_limit,
-                },
-            )
-            await self._create_pdf_fraud_event(
-                visitor=visitor,
-                request=request,
-                event_type=FraudEventType.FREE_LIMIT_REACHED.value,
-                severity=FraudSeverity.HIGH.value,
-                risk_points=40,
-                message="Anonymous free usage limit reached.",
-            )
-            await self.visitor_repository.mark_visitor_blocked(
-                visitor_id=visitor["_id"],
-                reason="FREE_LIMIT_REACHED",
-            )
-            await self.fraud_service.create_blocked_entity(
-                entity_type=BlockedEntityType.VISITOR.value,
-                entity_value=visitor["_id"],
-                reason="FREE_LIMIT_REACHED",
-                risk_score=int(visitor.get("risk_score", 0)),
-            )
-            blocked_visitor = await self.visitor_repository.get_by_id(visitor["_id"])
-            await self.fraud_event_service.create_from_request(
-                request=request,
-                visitor=blocked_visitor or visitor,
-                event_type=AdminFraudEventType.VISITOR_BLOCKED.value,
-                severity=AdminFraudSeverity.HIGH.value,
-                action="Visitor blocked.",
-                allowed=False,
-                reason="FREE_LIMIT_REACHED",
-                metadata={
-                    "free_usage_count": shared_used,
-                    "free_usage_limit": shared_limit,
-                },
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_limit_response(),
             )
 
         try:
@@ -370,7 +316,7 @@ class PDFService:
             )
             if updated_visitor is None:
                 raise RuntimeError("Visitor usage update failed")
-            await self.anonymous_usage_service.record_anonymous_pdf_usage(
+            updated_window = await self.anonymous_usage_service.record_anonymous_pdf_usage(
                 ip_address=ip_address,
                 visitor_id=updated_visitor["_id"],
                 anon_id=anon_id,
@@ -413,23 +359,24 @@ class PDFService:
                 detail="Too many requests. Please wait a moment and try again.",
             ) from exc
 
-        visitor_usage_after = int((updated_visitor or visitor).get("free_usage_count", 0))
-        ip_usage_after = int(shared_usage_snapshot["ip_usage_count"]) + 1
-        shared_usage_after = max(visitor_usage_after, ip_usage_after)
-        remaining_after = max(shared_limit - shared_usage_after, 0)
+        updated_usage_status = await self.anonymous_usage_service.get_anonymous_usage_status(
+            request=request,
+            visitor=updated_visitor,
+            active_window=updated_window,
+        )
         return PDFGenerateResponse(
             success=True,
             message="PDF generated successfully.",
             pdf_id=pdf_id,
             title=payload.title,
             file_name=file_name,
-            free_limit=shared_limit,
-            used=shared_usage_after,
-            remaining=remaining_after,
-            free_usage_count=shared_usage_after,
-            free_usage_limit=shared_limit,
-            remaining_free_uses=remaining_after,
-            requires_login=shared_usage_after >= shared_limit,
+            free_limit=int(updated_usage_status["free_limit"]),
+            used=int(updated_usage_status["used"]),
+            remaining=int(updated_usage_status["remaining"]),
+            free_usage_count=int(updated_usage_status["free_usage_count"]),
+            free_usage_limit=int(updated_usage_status["free_usage_limit"]),
+            remaining_free_uses=int(updated_usage_status["remaining_free_uses"]),
+            requires_login=bool(updated_usage_status["requires_login"]),
         )
 
     async def get_pdf_history_for_visitor(self, request: Request) -> PDFHistoryResponse:
@@ -726,12 +673,19 @@ def _first_or_empty(values: list[str]) -> str:
 
 def _build_limit_response(
     message: str = "Free limit reached. Please log in to continue.",
-) -> dict[str, bool | str]:
-    return {
+    free_limit: int | None = None,
+    used: int | None = None,
+) -> dict[str, bool | int | str]:
+    response: dict[str, bool | int | str] = {
         "success": False,
         "message": message,
         "requires_login": True,
     }
+    if free_limit is not None and used is not None:
+        response["free_limit"] = int(free_limit)
+        response["used"] = int(used)
+        response["remaining"] = max(int(free_limit) - int(used), 0)
+    return response
 
 
 def _build_block_response(free_limit: int, used: int) -> dict[str, bool | str]:

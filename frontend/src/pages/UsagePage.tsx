@@ -56,7 +56,7 @@ export default function UsagePage() {
         ) : null}
         {!loading && !error && !isAuthenticated ? (
           <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
-            <UsageCard status={status} />
+            <UsageCard status={status} showLoginCta={Boolean(status?.is_blocked)} />
             <section className="panel p-5">
               <h2 className="text-xl font-black text-[#10213f]">Account access</h2>
               <p className="mt-2 text-sm font-semibold text-[#52647f]">

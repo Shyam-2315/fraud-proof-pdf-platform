@@ -19,6 +19,7 @@ SHARED_TEST_IPS = [
     "203.0.113.54",
     "203.0.113.60",
     "203.0.113.61",
+    "203.0.113.62",
 ]
 
 CUSTOMER_FORBIDDEN = {
@@ -206,6 +207,9 @@ def test_anonymous_third_pdf_requires_login_with_clean_response() -> None:
         assert third.json() == {
             "success": False,
             "message": "Free limit reached. Please log in to continue.",
+            "free_limit": 2,
+            "used": 2,
+            "remaining": 0,
             "requires_login": True,
         }
         _assert_customer_safe(third.json())
@@ -383,6 +387,9 @@ def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() 
         assert status_response.status_code == 200, status_response.text
         body = status_response.json()
         _assert_customer_safe(body)
+        assert body["used"] == 2
+        assert body["remaining"] == 0
+        assert body["free_limit"] == 2
         assert body["free_usage_count"] == 2
         assert body["remaining_free_uses"] == 0
         assert body["is_blocked"] is True
@@ -409,6 +416,9 @@ def test_shared_ip_second_pdf_from_new_visitor_reaches_limit_for_all_browsers() 
         assert status_response.status_code == 200, status_response.text
         body = status_response.json()
         _assert_customer_safe(body)
+        assert body["used"] == 2
+        assert body["remaining"] == 0
+        assert body["free_limit"] == 2
         assert body["free_usage_count"] == 2
         assert body["remaining_free_uses"] == 0
         assert body["is_blocked"] is True
@@ -529,9 +539,81 @@ def test_incognito_cannot_generate_after_same_ip_browser_uses_two_free_pdfs() ->
         assert blocked.json() == {
             "success": False,
             "message": "Free limit reached. Please log in to continue.",
+            "free_limit": 2,
+            "used": 2,
+            "remaining": 0,
             "requires_login": True,
         }
         _assert_customer_safe(blocked.json())
+
+
+def test_shared_ip_blocked_status_and_generate_agree_for_new_visitor() -> None:
+    ip_address = "203.0.113.62"
+    primary_prefix = f"shared-agree-primary-{uuid4()}"
+    blocked_prefix = f"shared-agree-blocked-{uuid4()}"
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{primary_prefix}-local",
+            f"{primary_prefix}-session",
+            f"{primary_prefix}-fingerprint",
+        ),
+    ) as primary:
+        _identify(
+            primary,
+            primary_prefix,
+            local_storage_id=f"{primary_prefix}-local",
+            session_id=f"{primary_prefix}-session",
+            fingerprint_hash=f"{primary_prefix}-fingerprint",
+        )
+        assert _generate(primary, "Shared agree first").status_code == 200
+        assert _generate(primary, "Shared agree second").status_code == 200
+
+    with httpx.Client(
+        base_url=BASE_URL,
+        timeout=10.0,
+        headers=_identity_headers(
+            ip_address,
+            f"{blocked_prefix}-local",
+            f"{blocked_prefix}-session",
+            f"{blocked_prefix}-fingerprint",
+        ),
+    ) as blocked_client:
+        _identify(
+            blocked_client,
+            blocked_prefix,
+            local_storage_id=f"{blocked_prefix}-local",
+            session_id=f"{blocked_prefix}-session",
+            fingerprint_hash=f"{blocked_prefix}-fingerprint",
+        )
+
+        status_response = blocked_client.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        status_body = status_response.json()
+        _assert_customer_safe(status_body)
+        assert status_body["used"] == 2
+        assert status_body["remaining"] == 0
+        assert status_body["free_limit"] == 2
+        assert status_body["free_usage_count"] == 2
+        assert status_body["remaining_free_uses"] == 0
+        assert status_body["is_blocked"] is True
+        assert status_body["requires_login"] is True
+        assert status_body["message"] == "Free limit reached. Please log in to continue."
+
+        blocked_generate = _generate(blocked_client, "Shared agree blocked")
+        assert blocked_generate.status_code == 403, blocked_generate.text
+        assert blocked_generate.json() == {
+            "success": False,
+            "message": "Free limit reached. Please log in to continue.",
+            "free_limit": 2,
+            "used": 2,
+            "remaining": 0,
+            "requires_login": True,
+        }
+        _assert_customer_safe(blocked_generate.json())
 
 
 def test_shared_ip_third_new_visitor_is_blocked() -> None:
@@ -564,6 +646,9 @@ def test_shared_ip_third_new_visitor_is_blocked() -> None:
                 assert response.json() == {
                     "success": False,
                     "message": "Free limit reached. Please log in to continue.",
+                    "free_limit": 2,
+                    "used": 2,
+                    "remaining": 0,
                     "requires_login": True,
                 }
                 _assert_customer_safe(response.json())
