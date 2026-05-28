@@ -69,3 +69,4 @@ class VisitorStatusResponse(BaseModel):
     is_blocked: bool
     message: str | None = None
     requires_login: bool = False
+    fraud_blocked: bool | None = None

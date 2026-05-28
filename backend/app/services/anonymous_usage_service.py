@@ -11,6 +11,8 @@ from app.utils.request_utils import get_normalized_client_ip
 from app.utils.security import normalize_ip, utc_now
 
 logger = logging.getLogger(__name__)
+_GENERIC_BLOCK_MESSAGE = "We could not process this request right now. Please try again later."
+_LIMIT_BLOCK_REASON = "FREE_LIMIT_REACHED"
 
 
 class AnonymousUsageService:
@@ -259,13 +261,27 @@ class AnonymousUsageService:
         )
         free_limit = int(snapshot["free_usage_limit"])
         remaining = max(free_limit - used, 0)
-        visitor_is_blocked = bool((visitor or {}).get("is_blocked", False))
-        is_blocked = visitor_is_blocked or used >= free_limit
-        message = LOGIN_REQUIRED_MESSAGE if is_blocked else None
+        block_state = self._block_state(visitor=visitor, remaining=remaining)
+        limit_reached = block_state["limit_reached"]
+        fraud_blocked = block_state["fraud_blocked"]
+        visitor_blocked = block_state["visitor_blocked"]
+        block_reason = block_state["block_reason"]
+        is_blocked = limit_reached or fraud_blocked
+        message = (
+            LOGIN_REQUIRED_MESSAGE
+            if limit_reached
+            else _GENERIC_BLOCK_MESSAGE
+            if fraud_blocked
+            else None
+        )
 
-        log = logger.info if is_blocked or ip_usage_count > 0 or used != visitor_usage_count else logger.debug
+        log = (
+            logger.info
+            if is_blocked or visitor_blocked or ip_usage_count > 0 or used != visitor_usage_count
+            else logger.debug
+        )
         log(
-            "Anonymous usage status visitor_id=%s ip=%s visitor_usage=%s ip_usage=%s device_usage=%s fingerprint_usage=%s used=%s remaining=%s is_blocked=%s",
+            "Anonymous usage status visitor_id=%s ip=%s visitor_usage=%s ip_usage=%s device_usage=%s fingerprint_usage=%s used=%s remaining=%s limit_reached=%s fraud_blocked=%s visitor_blocked=%s block_reason=%s is_blocked=%s",
             (visitor or {}).get("_id"),
             normalized_ip,
             visitor_usage_count,
@@ -274,6 +290,10 @@ class AnonymousUsageService:
             fingerprint_usage_count,
             used,
             remaining,
+            limit_reached,
+            fraud_blocked,
+            visitor_blocked,
+            block_reason,
             is_blocked,
         )
 
@@ -288,8 +308,33 @@ class AnonymousUsageService:
             "ip_usage_count": ip_usage_count,
             "device_usage_count": device_usage_count,
             "fingerprint_usage_count": fingerprint_usage_count,
+            "limit_reached": limit_reached,
+            "fraud_blocked": fraud_blocked,
+            "visitor_blocked": visitor_blocked,
+            "block_reason": block_reason,
             "is_blocked": is_blocked,
             "message": message,
-            "requires_login": is_blocked,
+            "requires_login": limit_reached,
             "active_window": snapshot.get("active_window"),
+        }
+
+    def _block_state(
+        self,
+        *,
+        visitor: dict[str, Any] | None,
+        remaining: int,
+    ) -> dict[str, bool | str | None]:
+        """Classify anonymous visitor blocking into limit and explicit-fraud buckets."""
+        block_reason = str((visitor or {}).get("block_reason") or "").strip() or None
+        visitor_blocked = bool((visitor or {}).get("is_blocked", False))
+        stored_fraud_blocked = bool((visitor or {}).get("fraud_blocked", False))
+        limit_reached = remaining <= 0
+        fraud_blocked = stored_fraud_blocked or (
+            visitor_blocked and block_reason not in {None, _LIMIT_BLOCK_REASON}
+        )
+        return {
+            "limit_reached": limit_reached,
+            "fraud_blocked": fraud_blocked,
+            "visitor_blocked": visitor_blocked,
+            "block_reason": block_reason,
         }

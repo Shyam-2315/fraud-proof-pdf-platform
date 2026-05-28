@@ -70,7 +70,7 @@ async def identify_visitor(
             logger.info("Slow endpoint path=%s duration_ms=%.2f", request.url.path, duration_ms)
 
 
-@router.get("/status", response_model=VisitorStatusResponse)
+@router.get("/status", response_model=VisitorStatusResponse, response_model_exclude_unset=True)
 async def visitor_status(request: Request) -> VisitorStatusResponse:
     """
     Return the anonymous visitor's remaining free usage status.
@@ -100,17 +100,22 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
             request=request,
             visitor=visitor,
         )
+        response_data = {
+            "visitor_id": visitor["_id"],
+            "used": int(usage_status["used"]),
+            "remaining": int(usage_status["remaining"]),
+            "free_limit": int(usage_status["free_limit"]),
+            "free_usage_count": int(usage_status["free_usage_count"]),
+            "free_usage_limit": int(usage_status["free_usage_limit"]),
+            "remaining_free_uses": int(usage_status["remaining_free_uses"]),
+            "is_blocked": bool(usage_status["is_blocked"]),
+            "message": usage_status["message"],
+            "requires_login": bool(usage_status["requires_login"]),
+        }
+        if usage_status["fraud_blocked"]:
+            response_data["fraud_blocked"] = True
         return VisitorStatusResponse(
-            visitor_id=visitor["_id"],
-            used=int(usage_status["used"]),
-            remaining=int(usage_status["remaining"]),
-            free_limit=int(usage_status["free_limit"]),
-            free_usage_count=int(usage_status["free_usage_count"]),
-            free_usage_limit=int(usage_status["free_usage_limit"]),
-            remaining_free_uses=int(usage_status["remaining_free_uses"]),
-            is_blocked=bool(usage_status["is_blocked"]),
-            message=usage_status["message"],
-            requires_login=bool(usage_status["requires_login"]),
+            **response_data,
         )
     finally:
         duration_ms = (perf_counter() - started_at) * 1000

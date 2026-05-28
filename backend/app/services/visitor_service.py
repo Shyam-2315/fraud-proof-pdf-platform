@@ -139,6 +139,7 @@ class VisitorService:
                 "risk_score": risk_score,
                 "risk_level": calculate_risk_level(risk_score),
                 "is_blocked": is_blocked,
+                "fraud_blocked": is_blocked,
                 "block_reason": "FINGERPRINT_BLOCKED" if is_blocked else None,
                 "created_at": now,
                 "last_seen_at": now,

@@ -178,7 +178,23 @@ class PDFService:
         )
         shared_used = int(anonymous_usage_status["used"])
         shared_limit = int(anonymous_usage_status["free_limit"])
-        if shared_used >= shared_limit:
+        remaining = int(anonymous_usage_status["remaining"])
+        limit_reached = bool(anonymous_usage_status["limit_reached"])
+        fraud_blocked = bool(anonymous_usage_status["fraud_blocked"])
+        visitor_blocked = bool(anonymous_usage_status["visitor_blocked"])
+        block_reason = anonymous_usage_status.get("block_reason")
+        log = logger.info if limit_reached or fraud_blocked or visitor_blocked else logger.debug
+        log(
+            "Anonymous PDF access visitor_id=%s used=%s remaining=%s limit_reached=%s fraud_blocked=%s visitor_blocked=%s block_reason=%s",
+            visitor.get("_id"),
+            shared_used,
+            remaining,
+            limit_reached,
+            fraud_blocked,
+            visitor_blocked,
+            block_reason,
+        )
+        if limit_reached:
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
                 user_id=None,
@@ -191,6 +207,38 @@ class PDFService:
                     message="Free limit reached. Please log in to continue.",
                     free_limit=shared_limit,
                     used=shared_used,
+                ),
+            )
+
+        if fraud_blocked:
+            await self.fraud_event_service.create_from_request(
+                request=request,
+                visitor=visitor,
+                event_type=AdminFraudEventType.PDF_GENERATION_BLOCKED.value,
+                severity=AdminFraudSeverity.HIGH.value,
+                action="PDF generation blocked.",
+                allowed=False,
+                reason=str(block_reason or "VISITOR_BLOCKED"),
+                metadata={
+                    "title": payload.title,
+                    "remaining": remaining,
+                    "used": shared_used,
+                    "free_limit": shared_limit,
+                },
+            )
+            await self._create_pdf_fraud_event(
+                visitor=visitor,
+                request=request,
+                event_type=FraudEventType.BLOCKED_VISITOR_REQUEST.value,
+                severity=FraudSeverity.HIGH.value,
+                risk_points=10,
+                message="Blocked visitor attempted to generate PDF.",
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_build_block_response(
+                    free_limit=self.settings.FREE_USAGE_LIMIT,
+                    used=min(shared_used, self.settings.FREE_USAGE_LIMIT),
                 ),
             )
 
@@ -306,45 +354,6 @@ class PDFService:
                 detail=_build_block_response(
                     used=int(visitor.get("free_usage_count", 0)),
                     free_limit=self.settings.FREE_USAGE_LIMIT,
-                ),
-            )
-
-        if bool(visitor.get("is_blocked", False)):
-            block_reason = visitor.get("block_reason") or "VISITOR_BLOCKED"
-            if block_reason == "FREE_LIMIT_REACHED":
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=_build_limit_response(
-                        free_limit=shared_limit,
-                        used=shared_used,
-                    ),
-                )
-            await self.fraud_event_service.create_from_request(
-                request=request,
-                visitor=visitor,
-                event_type=AdminFraudEventType.PDF_GENERATION_BLOCKED.value,
-                severity=AdminFraudSeverity.HIGH.value,
-                action="PDF generation blocked.",
-                allowed=False,
-                reason=visitor.get("block_reason") or "VISITOR_BLOCKED",
-                metadata={"title": payload.title},
-            )
-            await self._create_pdf_fraud_event(
-                visitor=visitor,
-                request=request,
-                event_type=FraudEventType.BLOCKED_VISITOR_REQUEST.value,
-                severity=FraudSeverity.HIGH.value,
-                risk_points=10,
-                message="Blocked visitor attempted to generate PDF.",
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_block_response(
-                    free_limit=self.settings.FREE_USAGE_LIMIT,
-                    used=min(
-                        int(visitor.get("free_usage_count", 0)),
-                        self.settings.FREE_USAGE_LIMIT,
-                    ),
                 ),
             )
 

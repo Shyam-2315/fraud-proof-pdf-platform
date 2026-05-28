@@ -306,6 +306,8 @@ class VisitorRepository:
         self,
         visitor_id: str,
         reason: str,
+        *,
+        fraud_blocked: bool | None = None,
     ) -> dict[str, Any] | None:
         """
         Mark persisted visitor blocked data with the requested state.
@@ -317,11 +319,15 @@ class VisitorRepository:
         Returns:
             Updated result of the operation.
         """
+        effective_fraud_blocked = (
+            fraud_blocked if fraud_blocked is not None else reason != "FREE_LIMIT_REACHED"
+        )
         return await self.get_collection().find_one_and_update(
             {"_id": visitor_id},
             {
                 "$set": {
                     "is_blocked": True,
+                    "fraud_blocked": bool(effective_fraud_blocked),
                     "block_reason": reason,
                     "last_seen_at": utc_now(),
                 }

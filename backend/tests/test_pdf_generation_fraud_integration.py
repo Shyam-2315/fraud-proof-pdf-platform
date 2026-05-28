@@ -253,6 +253,81 @@ def test_changed_ip_does_not_reset_anonymous_limit() -> None:
         assert changed_ip.json()["requires_login"] is True
 
 
+def test_stale_free_limit_block_flag_does_not_block_when_remaining_exists() -> None:
+    prefix = f"stale-limit-flag-{uuid4()}"
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+
+    with httpx.Client(base_url=BASE_URL, timeout=10.0, headers=_headers(26)) as client:
+        identify = _identify(client, prefix)
+        db.visitors.update_one(
+            {"_id": identify["visitor_id"]},
+            {
+                "$set": {
+                    "is_blocked": True,
+                    "fraud_blocked": False,
+                    "block_reason": "FREE_LIMIT_REACHED",
+                    "free_usage_count": 0,
+                }
+            },
+        )
+
+        status_response = client.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        status_body = status_response.json()
+        _assert_customer_safe(status_body)
+        assert status_body["used"] == 0
+        assert status_body["remaining"] == 2
+        assert status_body["free_limit"] == 2
+        assert status_body["is_blocked"] is False
+        assert status_body["requires_login"] is False
+        assert status_body["message"] is None
+
+        generate_response = _generate(client, "Recovered from stale block")
+        assert generate_response.status_code == 200, generate_response.text
+        generate_body = generate_response.json()
+        _assert_customer_safe(generate_body)
+        assert generate_body["used"] == 1
+        assert generate_body["remaining"] == 1
+
+
+def test_explicit_fraud_block_still_blocks_even_when_remaining_exists() -> None:
+    prefix = f"fraud-block-{uuid4()}"
+    mongo = MongoClient(TEST_MONGO_URL)
+    db = mongo[TEST_MONGO_DB_NAME]
+
+    with httpx.Client(base_url=BASE_URL, timeout=10.0, headers=_headers(27)) as client:
+        identify = _identify(client, prefix)
+        db.visitors.update_one(
+            {"_id": identify["visitor_id"]},
+            {
+                "$set": {
+                    "is_blocked": True,
+                    "fraud_blocked": True,
+                    "block_reason": "HIGH_RISK_FINGERPRINT",
+                    "free_usage_count": 0,
+                }
+            },
+        )
+
+        status_response = client.get("/api/visitor/status")
+        assert status_response.status_code == 200, status_response.text
+        status_body = status_response.json()
+        assert status_body["used"] == 0
+        assert status_body["remaining"] == 2
+        assert status_body["free_limit"] == 2
+        assert status_body["is_blocked"] is True
+        assert status_body["fraud_blocked"] is True
+        assert status_body["requires_login"] is False
+
+        blocked = _generate(client, "Fraud blocked request")
+        assert blocked.status_code == 403, blocked.text
+        assert blocked.json() == {
+            "success": False,
+            "message": "We could not process this request right now. Please try again later.",
+        }
+
+
 def test_same_ip_only_does_not_merge_different_users() -> None:
     ip = 27
     first_prefix = f"same-ip-a-{uuid4()}"
