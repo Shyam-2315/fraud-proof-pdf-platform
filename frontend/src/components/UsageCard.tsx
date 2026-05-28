@@ -1,6 +1,10 @@
 import { BarChart3 } from "lucide-react";
 import { Link } from "react-router-dom";
-import type { VisitorStatus } from "../api/userApi";
+import {
+  getVisitorStatusMessage,
+  getVisitorUsageSnapshot,
+  type VisitorStatus,
+} from "../api/userApi";
 
 export default function UsageCard({
   status,
@@ -9,9 +13,8 @@ export default function UsageCard({
   status: VisitorStatus | null;
   showLoginCta?: boolean;
 }) {
-  const used = status?.used ?? status?.free_usage_count ?? 0;
-  const limit = status?.free_limit ?? status?.free_usage_limit ?? 2;
-  const remaining = status?.remaining ?? status?.remaining_free_uses ?? limit;
+  const { used, remaining, freeLimit } = getVisitorUsageSnapshot(status);
+  const limit = freeLimit;
   const percent = Math.min(100, Math.round((used / Math.max(limit, 1)) * 100));
 
   return (
@@ -23,7 +26,7 @@ export default function UsageCard({
         <div>
           <h2 className="text-lg font-black text-[#10213f]">Free usage</h2>
           <p className="text-sm font-semibold text-[#52647f]">
-            {status?.message || "You can generate 2 PDFs for free."}
+            {getVisitorStatusMessage(status)}
           </p>
         </div>
       </div>

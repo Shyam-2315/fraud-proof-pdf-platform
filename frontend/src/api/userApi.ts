@@ -18,6 +18,7 @@ export type VisitorStatus = {
   is_blocked: boolean;
   message: string | null;
   requires_login?: boolean;
+  fraud_blocked?: boolean;
 };
 
 export type GeneratePdfResponse = {
@@ -87,7 +88,7 @@ export function ensureVisitorIdentified(options: { force?: boolean } = {}) {
 }
 
 export function getVisitorStatus() {
-  return customerRequest<VisitorStatus>("/api/visitor/status");
+  return customerRequest<VisitorStatus>("/api/visitor/status").then(normalizeVisitorStatus);
 }
 
 export async function getVisitorStatusAfterIdentify() {
@@ -123,4 +124,46 @@ export function sendBehaviorEvent(event_type: string, metadata: Record<string, u
 
 export function getMyPdfHistory() {
   return customerRequest<PdfHistory>("/api/pdf/my-history");
+}
+
+export function getVisitorUsageSnapshot(status: Partial<VisitorStatus> | null) {
+  const used = status?.used ?? status?.free_usage_count ?? 0;
+  const limit = status?.free_limit ?? status?.free_usage_limit ?? 2;
+  const remaining = status?.remaining ?? status?.remaining_free_uses ?? Math.max(limit - used, 0);
+  return {
+    used: Math.max(used, 0),
+    remaining: Math.max(remaining, 0),
+    freeLimit: Math.max(limit, 0),
+  };
+}
+
+export function isVisitorStatusBlocked(status: Partial<VisitorStatus> | null) {
+  if (!status) return false;
+  const fraudBlocked = Boolean(status.fraud_blocked);
+  const { remaining } = getVisitorUsageSnapshot(status);
+  return fraudBlocked || remaining <= 0;
+}
+
+export function getVisitorStatusMessage(status: Partial<VisitorStatus> | null) {
+  const { freeLimit } = getVisitorUsageSnapshot(status);
+  return isVisitorStatusBlocked(status)
+    ? status?.message || "Free limit reached. Please log in to continue."
+    : `You can generate ${freeLimit} PDFs for free.`;
+}
+
+export function normalizeVisitorStatus(status: VisitorStatus): VisitorStatus {
+  const usage = getVisitorUsageSnapshot(status);
+  const blocked = isVisitorStatusBlocked(status);
+  return {
+    ...status,
+    used: usage.used,
+    remaining: usage.remaining,
+    free_limit: usage.freeLimit,
+    free_usage_count: usage.used,
+    free_usage_limit: usage.freeLimit,
+    remaining_free_uses: usage.remaining,
+    is_blocked: blocked,
+    requires_login: blocked,
+    message: blocked ? status.message || "Free limit reached. Please log in to continue." : null,
+  };
 }

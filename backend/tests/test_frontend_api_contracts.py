@@ -52,6 +52,17 @@ def test_generate_page_identifies_before_status_and_before_generate() -> None:
     assert source.rfind("await ensureVisitorIdentified();", 0, generate_index) != -1
 
 
+def test_generate_page_uses_normalized_remaining_for_blocked_state() -> None:
+    _require_frontend_source()
+    page_source = (FRONTEND_SRC / "pages" / "GeneratePage.tsx").read_text(encoding="utf-8")
+    usage_api_source = (FRONTEND_SRC / "api" / "userApi.ts").read_text(encoding="utf-8")
+
+    assert "isVisitorStatusBlocked(status)" in page_source
+    assert "getVisitorStatusMessage(status)" in page_source
+    assert "const { remaining } = getVisitorUsageSnapshot(status);" in usage_api_source
+    assert "return fraudBlocked || remaining <= 0;" in usage_api_source
+
+
 def test_frontend_exposes_verify_email_route_and_api_calls() -> None:
     _require_frontend_source()
     auth_api_source = (FRONTEND_SRC / "api" / "authApi.ts").read_text(encoding="utf-8")

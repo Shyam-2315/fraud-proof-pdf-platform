@@ -6,6 +6,8 @@ import {
   ensureVisitorIdentified,
   generatePdf,
   getVisitorStatusAfterIdentify,
+  getVisitorStatusMessage,
+  isVisitorStatusBlocked,
   sendBehaviorEvent,
   type GeneratePdfResponse,
   type VisitorStatus,
@@ -32,6 +34,12 @@ export default function GeneratePage() {
   async function refreshStatus() {
     const nextStatus = await getVisitorStatusAfterIdentify();
     setStatus(nextStatus);
+    if (!isVisitorStatusBlocked(nextStatus)) {
+      setShowLoginPrompt(false);
+      setError((current) =>
+        current === "Free limit reached. Please log in to continue." ? "" : current,
+      );
+    }
     return nextStatus;
   }
 
@@ -61,9 +69,9 @@ export default function GeneratePage() {
 
   async function submit(values: PdfFormValues) {
     if (generating) return;
-    if (!isAuthenticated && status?.is_blocked) {
+    if (!isAuthenticated && isVisitorStatusBlocked(status)) {
       setMessage("");
-      setError(status.message || "Free limit reached. Please log in to continue.");
+      setError(getVisitorStatusMessage(status));
       setShowLoginPrompt(true);
       return;
     }
@@ -83,8 +91,14 @@ export default function GeneratePage() {
         const body = err.body as Partial<GeneratePdfResponse>;
         setMessage("");
         const refreshedStatus = isAuthenticated ? null : await refreshStatus().catch(() => null);
-        setError(body.message || refreshedStatus?.message || "Free limit reached. Please log in to continue.");
-        if (body.requires_login || refreshedStatus?.is_blocked) setShowLoginPrompt(true);
+        const blockedByStatus = isVisitorStatusBlocked(refreshedStatus);
+        if (blockedByStatus) {
+          setError(getVisitorStatusMessage(refreshedStatus));
+          setShowLoginPrompt(true);
+        } else {
+          setError(body.message || "Too many requests. Please wait a moment and try again.");
+          setShowLoginPrompt(false);
+        }
         if (!isAuthenticated && refreshedStatus === null) {
           setError("We could not start your session. Please refresh and try again.");
         }
@@ -140,13 +154,19 @@ export default function GeneratePage() {
                 ) : null}
               </div>
             ) : null}
-            <PdfForm disabled={generating || (!isAuthenticated && Boolean(status?.is_blocked))} onSubmit={submit} />
+            <PdfForm
+              disabled={generating || (!isAuthenticated && isVisitorStatusBlocked(status))}
+              onSubmit={submit}
+            />
           </div>
           <aside>
             {loading ? (
               <LoadingState label="Loading usage..." />
             ) : (
-              <UsageCard status={status} showLoginCta={!isAuthenticated && Boolean(status?.is_blocked)} />
+              <UsageCard
+                status={status}
+                showLoginCta={!isAuthenticated && isVisitorStatusBlocked(status)}
+              />
             )}
           </aside>
         </div>
