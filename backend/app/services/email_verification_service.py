@@ -23,18 +23,44 @@ TOO_MANY_ATTEMPTS_MESSAGE = "Too many verification attempts. Please request a ne
 
 
 class EmailVerificationService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         repository: EmailVerificationRepository | None = None,
         user_repository: UserRepository | None = None,
         email_service: EmailService | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+            user_repository: The user repository value used by this operation.
+            email_service: The email service value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
         self.repository = repository or EmailVerificationRepository()
         self.user_repository = user_repository or UserRepository()
         self.email_service = email_service or EmailService()
 
     def normalize_and_validate_email(self, email: str) -> str:
+        """
+        Normalize and validate email for downstream use.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+        
+        Returns:
+            Normalized helper result derived from the supplied input.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         try:
             validated = validate_email(
                 email,
@@ -55,10 +81,29 @@ class EmailVerificationService:
         return normalized_email
 
     def is_disposable_domain(self, email: str) -> bool:
+        """
+        Is Disposable Domain for the requested operation.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+        
+        Returns:
+            `True` when the condition is satisfied, otherwise `False`.
+        """
         _, _, domain = email.rpartition("@")
         return domain.lower() in _load_disposable_domains(self.settings.DISPOSABLE_EMAIL_DOMAINS_PATH)
 
     async def create_and_send_code(self, *, user_id: str, email: str) -> dict[str, str]:
+        """
+        Create and send code for the requested operation.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+            email: Email address used for lookup, verification, or delivery.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         code = self.generate_code()
         code_hash = self.hash_code(code)
         now = utc_now()
@@ -79,6 +124,19 @@ class EmailVerificationService:
         return {"email": email}
 
     async def verify_email(self, *, email: str, code: str) -> None:
+        """
+        Verify the submitted code or identity data for the workflow.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+            code: Verification or authorization code supplied by the caller.
+        
+        Returns:
+            None.
+        
+        Raises:
+            _verification_error: If the underlying operation cannot be completed.
+        """
         normalized_email = self.normalize_and_validate_email(email)
         verification = await self.repository.find_latest_unconsumed_by_email(normalized_email)
         if verification is None:
@@ -109,6 +167,16 @@ class EmailVerificationService:
         await self.repository.consume(verification["_id"])
 
     async def resend_verification(self, *, email: str, ignore_cooldown: bool = False) -> None:
+        """
+        Resend the required verification or notification data.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+            ignore_cooldown: The ignore cooldown value used by this operation.
+        
+        Returns:
+            None.
+        """
         normalized_email = self.normalize_and_validate_email(email)
         user = await self.user_repository.find_by_email(normalized_email)
         if user is None or self.is_user_verified(user):
@@ -123,21 +191,64 @@ class EmailVerificationService:
         await self.create_and_send_code(user_id=user["_id"], email=normalized_email)
 
     def generate_code(self) -> str:
+        """
+        Generate Code for the requested operation.
+        
+        Returns:
+            Operation result represented as `str`.
+        """
         return f"{secrets.randbelow(1_000_000):06d}"
 
     def hash_code(self, code: str) -> str:
+        """
+        Hash code for secure comparison or storage.
+        
+        Args:
+            code: Verification or authorization code supplied by the caller.
+        
+        Returns:
+            Normalized helper result derived from the supplied input.
+        """
         secret = self.settings.JWT_SECRET_KEY.encode("utf-8")
         return hmac.digest(secret, code.encode("utf-8"), "sha256").hex()
 
     def verify_code(self, *, code: str, code_hash: str) -> bool:
+        """
+        Verify the submitted code or identity data for the workflow.
+        
+        Args:
+            code: Verification or authorization code supplied by the caller.
+            code_hash: Hash value representing code.
+        
+        Returns:
+            Outcome of the requested operation.
+        """
         if not code or len(code) != 6 or not code.isdigit():
             return False
         return hmac.compare_digest(self.hash_code(code), code_hash)
 
     def is_user_verified(self, user: dict) -> bool:
+        """
+        Is User Verified for the requested operation.
+        
+        Args:
+            user: User record involved in the operation.
+        
+        Returns:
+            `True` when the condition is satisfied, otherwise `False`.
+        """
         return bool(user.get("email_verified", user.get("is_verified", False)))
 
     def _verification_error(self, message: str) -> HTTPException:
+        """
+        Verification Error for the requested operation.
+        
+        Args:
+            message: The message value used by this operation.
+        
+        Returns:
+            Operation result represented as `HTTPException`.
+        """
         return HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=message,
@@ -146,6 +257,15 @@ class EmailVerificationService:
 
 @lru_cache(maxsize=1)
 def _load_disposable_domains(configured_path: str) -> set[str]:
+    """
+    Load Disposable Domains for the requested operation.
+    
+    Args:
+        configured_path: The configured path value used by this operation.
+    
+    Returns:
+        Operation result represented as `set[str]`.
+    """
     path = Path(configured_path)
     if not path.is_absolute():
         path = Path(__file__).resolve().parents[2] / path
@@ -164,6 +284,15 @@ def _load_disposable_domains(configured_path: str) -> set[str]:
 
 
 def _as_utc(value: datetime) -> datetime:
+    """
+    As Utc for the requested operation.
+    
+    Args:
+        value: Value processed by the helper.
+    
+    Returns:
+        Operation result represented as `datetime`.
+    """
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)

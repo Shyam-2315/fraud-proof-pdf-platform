@@ -18,8 +18,6 @@ from app.schemas.fraud_event import (
 )
 from app.services.admin_audit_service import AdminAuditService
 from app.services.admin_fraud_service import AdminFraudService
-from app.fraud_engine.model_registry import ModelRegistry
-from app.fraud_engine.training_service import TrainingService
 from app.models.fraud_event import FraudEventType, FraudSeverity
 from app.repositories.fraud_engine_repository import FraudEngineRepository
 from app.services.fraud_event_service import FraudEventService
@@ -27,19 +25,42 @@ from app.services.rate_limit_service import RateLimitService, client_ip
 from app.utils.security import generate_uuid, utc_now
 
 router = APIRouter(
-    prefix="/api/admin",
+    prefix="/admin",
     dependencies=[Depends(require_admin_api_key)],
 )
 admin_fraud_service = AdminFraudService()
 admin_audit_service = AdminAuditService()
 fraud_engine_repository = FraudEngineRepository()
-model_registry = ModelRegistry(repository=fraud_engine_repository)
-training_service = TrainingService(repository=fraud_engine_repository, registry=model_registry)
 fraud_event_service = FraudEventService()
 settings = get_settings()
 rate_limit_service = RateLimitService()
 
 SeverityParam = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+
+
+def _get_model_registry():
+    """
+    Create a model registry backed by the shared fraud engine repository.
+
+    Returns:
+        Model registry instance for admin ML endpoints.
+    """
+    from app.fraud_engine.model_registry import ModelRegistry
+
+    return ModelRegistry(repository=fraud_engine_repository)
+
+
+def _get_training_service():
+    """
+    Create the ML training service only when an ML endpoint needs it.
+
+    Returns:
+        Training service instance configured with the shared repository and registry.
+    """
+    from app.fraud_engine.training_service import TrainingService
+
+    registry = _get_model_registry()
+    return TrainingService(repository=fraud_engine_repository, registry=registry)
 
 
 @router.get(
@@ -55,6 +76,20 @@ async def admin_fraud_events(
     visitor_id: str | None = None,
     allowed: bool | None = None,
 ) -> FraudEventListResponse:
+    """
+    Return recent fraud events for admin investigation screens.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of events to return.
+        severity: Optional fraud severity filter.
+        event_type: Optional event type filter.
+        visitor_id: Optional visitor identifier filter.
+        allowed: Optional allow or block decision filter.
+
+    Returns:
+        Filtered fraud events prepared for admin review.
+    """
     await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_fraud_events(
         limit=limit,
@@ -86,6 +121,16 @@ async def admin_fraud_visitors(
     request: Request,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> AdminFraudVisitorsResponse:
+    """
+    Return visitors with fraud-related activity for admin review.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of visitor records to return.
+
+    Returns:
+        Fraud-focused visitor list for the admin dashboard.
+    """
     await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_fraud_visitors(limit=limit)
     await admin_audit_service.log_access(
@@ -102,6 +147,15 @@ async def admin_fraud_visitors(
     tags=["Admin Fraud"],
 )
 async def admin_fraud_summary(request: Request) -> AdminFraudSummaryResponse:
+    """
+    Return high-level fraud summary metrics for administrators.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+
+    Returns:
+        Summary metrics for current fraud activity and decisions.
+    """
     await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_fraud_summary()
     await admin_audit_service.log_access(
@@ -120,6 +174,16 @@ async def admin_visitor_investigation(
     request: Request,
     visitor_id: str,
 ) -> AdminVisitorInvestigationResponse:
+    """
+    Return detailed fraud investigation data for a specific visitor.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        visitor_id: Identifier of the visitor under investigation.
+
+    Returns:
+        Investigation payload for the requested visitor.
+    """
     await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_visitor_investigation(
         visitor_id=visitor_id,
@@ -137,6 +201,16 @@ async def admin_pdfs(
     request: Request,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> AdminPDFListResponse:
+    """
+    Return generated PDFs visible to the admin fraud console.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of PDF records to return.
+
+    Returns:
+        Admin PDF listing for investigation workflows.
+    """
     await _enforce_admin_rate_limit(request)
     response = await admin_fraud_service.get_all_pdfs(limit=limit)
     await admin_audit_service.log_access(
@@ -156,6 +230,16 @@ async def admin_audit_logs(
     request: Request,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> AdminAuditLogListResponse:
+    """
+    Return recent admin audit logs.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of audit log entries to return.
+
+    Returns:
+        Audit log entries formatted for the admin interface.
+    """
     await _enforce_admin_rate_limit(request)
     logs = await admin_audit_service.list_logs(limit=limit)
     await admin_audit_service.log_access(
@@ -185,6 +269,19 @@ async def admin_apply_fraud_label(
     request: Request,
     payload: FraudLabelRequest,
 ) -> dict[str, object]:
+    """
+    Apply an admin fraud label to a visitor and related training data.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        payload: Fraud label assignment submitted by an admin reviewer.
+
+    Returns:
+        Created label metadata and the number of updated training events.
+
+    Raises:
+        HTTPException: If the submitted label value is not supported.
+    """
     await _enforce_admin_rate_limit(request)
     if payload.label not in {0, 1}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="label must be 0 or 1")
@@ -232,6 +329,18 @@ async def admin_fraud_decisions(
     visitor_id: str | None = None,
     action_type: str | None = None,
 ) -> dict[str, object]:
+    """
+    Return stored fraud decision records for administrative review.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of decisions to return.
+        visitor_id: Optional visitor filter.
+        action_type: Optional decision action filter.
+
+    Returns:
+        Sanitized decision records for the admin UI.
+    """
     await _enforce_admin_rate_limit(request)
     decisions = await fraud_engine_repository.list_decisions(
         limit=limit,
@@ -256,6 +365,17 @@ async def admin_fraud_features(
     visitor_id: str,
     limit: int = Query(default=50, ge=1, le=500),
 ) -> dict[str, object]:
+    """
+    Return saved fraud feature snapshots for a visitor.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        visitor_id: Visitor whose feature snapshots should be listed.
+        limit: Maximum number of feature snapshots to return.
+
+    Returns:
+        Sanitized feature snapshots for the requested visitor.
+    """
     await _enforce_admin_rate_limit(request)
     snapshots = await fraud_engine_repository.list_feature_snapshots_by_visitor(
         visitor_id=visitor_id,
@@ -276,6 +396,17 @@ async def admin_fraud_identity_links(
     visitor_id: str,
     limit: int = Query(default=100, ge=1, le=500),
 ) -> dict[str, object]:
+    """
+    Return identity links associated with a visitor.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        visitor_id: Visitor whose identity links should be listed.
+        limit: Maximum number of identity link records to return.
+
+    Returns:
+        Sanitized identity-link records for the requested visitor.
+    """
     await _enforce_admin_rate_limit(request)
     links = await admin_fraud_service.identity_link_repository.list_by_visitor_id(
         visitor_id=visitor_id,
@@ -295,6 +426,16 @@ async def admin_ip_usage(
     request: Request,
     limit: int = Query(default=100, ge=1, le=500),
 ) -> dict[str, object]:
+    """
+    Return aggregated anonymous IP usage entries.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of IP usage rows to return.
+
+    Returns:
+        Anonymous IP usage summary for admin review.
+    """
     await _enforce_admin_rate_limit(request)
     return await admin_fraud_service.get_ip_usage_list(limit=limit)
 
@@ -304,13 +445,33 @@ async def admin_ip_usage_detail(
     request: Request,
     ip_address: str,
 ) -> dict[str, object]:
+    """
+    Return anonymous usage details for a specific IP address.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        ip_address: IP address whose usage details should be inspected.
+
+    Returns:
+        Detailed anonymous usage information for the requested IP.
+    """
     await _enforce_admin_rate_limit(request)
     return await admin_fraud_service.get_ip_usage_detail(ip_address=ip_address)
 
 
 @router.get("/ml/models", tags=["Admin ML"])
 async def admin_ml_models(request: Request) -> dict[str, object]:
+    """
+    Return registered fraud ML model versions.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+
+    Returns:
+        Model version records known to the registry.
+    """
     await _enforce_admin_rate_limit(request)
+    model_registry = _get_model_registry()
     versions = await model_registry.list_versions()
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_ML_MODELS.value,
@@ -321,7 +482,17 @@ async def admin_ml_models(request: Request) -> dict[str, object]:
 
 @router.get("/ml/models/active", tags=["Admin ML"])
 async def admin_active_ml_model(request: Request) -> dict[str, object]:
+    """
+    Return the currently active fraud ML model configuration.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+
+    Returns:
+        Active model metadata and configuration details.
+    """
     await _enforce_admin_rate_limit(request)
+    model_registry = _get_model_registry()
     active = model_registry.active_config()
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_ML_MODELS.value,
@@ -332,6 +503,19 @@ async def admin_active_ml_model(request: Request) -> dict[str, object]:
 
 @router.post("/ml/train", tags=["Admin ML"])
 async def admin_train_ml_model(request: Request, payload: MLTrainRequest) -> dict[str, object]:
+    """
+    Start an online fraud model training job.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        payload: Training job options selected by the admin.
+
+    Returns:
+        Sanitized training result metadata.
+
+    Raises:
+        HTTPException: If online training is disabled for the environment.
+    """
     await _enforce_admin_rate_limit(request)
     if not settings.ENABLE_ONLINE_ML_TRAINING:
         raise HTTPException(
@@ -341,6 +525,7 @@ async def admin_train_ml_model(request: Request, payload: MLTrainRequest) -> dic
                 "Run training locally and upload model files, or enable it in environment settings."
             ),
         )
+    training_service = _get_training_service()
     result = await training_service.train(
         synthetic_csv=payload.synthetic_csv,
         demo=payload.demo,
@@ -358,7 +543,21 @@ async def admin_train_ml_model(request: Request, payload: MLTrainRequest) -> dic
 
 @router.post("/ml/models/{model_version_id}/activate", tags=["Admin ML"])
 async def admin_activate_ml_model(request: Request, model_version_id: str) -> dict[str, object]:
+    """
+    Activate a stored ML model version for fraud decisions.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        model_version_id: Identifier of the model version to activate.
+
+    Returns:
+        Activation status and sanitized model metadata.
+
+    Raises:
+        HTTPException: If the requested model version does not exist.
+    """
     await _enforce_admin_rate_limit(request)
+    model_registry = _get_model_registry()
     model = await model_registry.activate(model_version_id)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found.")
@@ -372,7 +571,21 @@ async def admin_activate_ml_model(request: Request, model_version_id: str) -> di
 
 @router.post("/ml/models/{model_version_id}/reject", tags=["Admin ML"])
 async def admin_reject_ml_model(request: Request, model_version_id: str) -> dict[str, object]:
+    """
+    Reject a stored ML model version in the admin workflow.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        model_version_id: Identifier of the model version to reject.
+
+    Returns:
+        Rejection status and sanitized model metadata.
+
+    Raises:
+        HTTPException: If the requested model version does not exist.
+    """
     await _enforce_admin_rate_limit(request)
+    model_registry = _get_model_registry()
     model = await model_registry.reject(model_version_id)
     if model is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Model version not found.")
@@ -385,6 +598,15 @@ async def admin_reject_ml_model(request: Request, model_version_id: str) -> dict
 
 
 def _sanitize_doc(value):
+    """
+    Remove non-serializable or internal Mongo fields from a document tree.
+
+    Args:
+        value: Document, list, or scalar value to sanitize.
+
+    Returns:
+        Sanitized structure safe to return in API responses.
+    """
     if isinstance(value, list):
         return [_sanitize_doc(item) for item in value]
     if isinstance(value, dict):
@@ -393,6 +615,12 @@ def _sanitize_doc(value):
 
 
 async def _enforce_admin_rate_limit(request: Request) -> None:
+    """
+    Apply the shared admin rate limit to the current request.
+
+    Args:
+        request: Incoming HTTP request whose client identity is rate limited.
+    """
     await rate_limit_service.check(
         request,
         bucket="admin",

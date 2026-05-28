@@ -21,6 +21,9 @@ PRODUCTION_TEST_ENV = {
     "ADMIN_FRONTEND_URL": "https://admin.pdfcraft.example.com",
     "BACKEND_PUBLIC_URL": "https://api.pdfcraft.example.com",
     "CORS_ORIGINS": '["https://pdfcraft.example.com","https://admin.pdfcraft.example.com"]',
+    "MONGODB_URL": "mongodb://test-mongo.internal:27017",
+    "MONGODB_DB_NAME": "fraud_pdf",
+    "REDIS_URL": "redis://test-redis.internal:6379/0",
     "JWT_SECRET_KEY": "test-strong-production-secret-not-default",
     "ADMIN_API_KEY": "test-strong-admin-key-not-default",
     "DEFAULT_ADMIN_PASSWORD": "TestStrongAdminPassword123",
@@ -28,9 +31,25 @@ PRODUCTION_TEST_ENV = {
     "SECURE_COOKIES": "true",
 }
 
+DEV_TEST_ENV = {
+    "FRONTEND_URL": "https://dev.pdfcraft.example.com",
+    "ADMIN_FRONTEND_URL": "https://admin-dev.pdfcraft.example.com",
+    "BACKEND_PUBLIC_URL": "https://api-dev.pdfcraft.example.com",
+    "CORS_ORIGINS": '["https://dev.pdfcraft.example.com","https://admin-dev.pdfcraft.example.com"]',
+    "MONGODB_URL": "mongodb://test-mongo.internal:27017",
+    "MONGODB_DB_NAME": "fraud_pdf",
+    "REDIS_URL": "redis://test-redis.internal:6379/0",
+}
+
 
 def apply_test_env(monkeypatch, **values: str) -> None:
-    env_values = dict(PRODUCTION_TEST_ENV if values.get("APP_ENV") == "production" else {})
+    app_env = (values.get("APP_ENV") or "").lower()
+    if app_env == "production":
+        env_values = dict(PRODUCTION_TEST_ENV)
+    elif app_env in {"development", "dev"}:
+        env_values = dict(DEV_TEST_ENV)
+    else:
+        env_values = {}
     env_values.update(values)
     env_values.setdefault("JWT_SECRET_KEY", "test-secret-value-that-is-long-enough")
     env_values.setdefault("ADMIN_API_KEY", "test-admin-key-that-is-long-enough")

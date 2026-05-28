@@ -11,16 +11,34 @@ from app.utils.security import generate_uuid, utc_now
 
 
 class TokenService:
+    """Issue, refresh, and revoke access and refresh tokens."""
+
     def __init__(
         self,
         refresh_token_repository: RefreshTokenRepository | None = None,
         user_repository: UserRepository | None = None,
     ) -> None:
+        """
+        Initialize the token service.
+
+        Args:
+            refresh_token_repository: Optional repository for refresh-token persistence.
+            user_repository: Optional repository for user lookups during refresh.
+        """
         self.settings = get_settings()
         self.refresh_token_repository = refresh_token_repository or RefreshTokenRepository()
         self.user_repository = user_repository or UserRepository()
 
     async def create_token_pair(self, user: dict) -> tuple[str, str]:
+        """
+        Create a new access token and persisted refresh token for a user.
+
+        Args:
+            user: Authenticated user document receiving the token pair.
+
+        Returns:
+            Tuple containing the signed access token and plain refresh token.
+        """
         access_token = create_access_token(
             subject=user["_id"],
             role=user.get("role"),
@@ -35,6 +53,19 @@ class TokenService:
         return access_token, refresh_token
 
     async def refresh_token_pair(self, refresh_token: str) -> tuple[str, str]:
+        """
+        Exchange an active refresh token for a newly issued token pair.
+
+        Args:
+            refresh_token: Refresh token presented by the client.
+
+        Returns:
+            Newly issued access and refresh token pair.
+
+        Raises:
+            HTTPException: If the refresh token is invalid, expired, or belongs to an
+                inactive or unverified user.
+        """
         token_record = await self.refresh_token_repository.find_active_by_token(refresh_token)
         if token_record is None:
             raise HTTPException(
@@ -57,5 +88,11 @@ class TokenService:
         return await self.create_token_pair(user)
 
     async def revoke_refresh_token(self, refresh_token: str | None) -> None:
+        """
+        Revoke a refresh token when one is supplied.
+
+        Args:
+            refresh_token: Refresh token that should be revoked, or ``None``.
+        """
         if refresh_token:
             await self.refresh_token_repository.revoke_by_token(refresh_token)

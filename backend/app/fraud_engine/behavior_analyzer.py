@@ -7,10 +7,28 @@ from app.utils.security import utc_now
 
 
 class BehaviorAnalyzer:
+    """Analyze stored visitor behavior events for fraud-related timing signals."""
+
     def __init__(self, repository: BehaviorEventRepository | None = None) -> None:
+        """
+        Initialize the behavior analyzer.
+
+        Args:
+            repository: Optional repository used to load behavior events.
+        """
         self.repository = repository or BehaviorEventRepository()
 
     async def analyze(self, visitor_id: str, content_hash: str | None = None) -> dict[str, Any]:
+        """
+        Build derived behavior features for a visitor.
+
+        Args:
+            visitor_id: Visitor whose behavior history should be analyzed.
+            content_hash: Optional content hash used to detect repeated generation attempts.
+
+        Returns:
+            Derived timing, repetition, and interaction metrics used by fraud scoring.
+        """
         now = utc_now()
         events = await self.repository.list_by_visitor_id(visitor_id, limit=200)
         page_views = [e for e in events if e.get("event_type") == BehaviorEventType.PAGE_VIEW.value]

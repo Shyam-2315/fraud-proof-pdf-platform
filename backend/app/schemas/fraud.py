@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 
 class FraudEventResponse(BaseModel):
+    """
+    Schema describing the fraud event response payload.
+    """
     event_id: str
     visitor_id: str | None
     event_type: str
@@ -16,11 +19,17 @@ class FraudEventResponse(BaseModel):
 
 
 class FraudEventsListResponse(BaseModel):
+    """
+    Schema describing the fraud events list response payload.
+    """
     total: int
     items: list[FraudEventResponse]
 
 
 class BlockedEntityResponse(BaseModel):
+    """
+    Schema describing the blocked entity response payload.
+    """
     entity_id: str
     entity_type: str
     entity_value: str
@@ -32,6 +41,9 @@ class BlockedEntityResponse(BaseModel):
 
 
 class FraudSummaryResponse(BaseModel):
+    """
+    Schema describing the fraud summary response payload.
+    """
     total_visitors: int
     blocked_visitors: int
     total_fraud_events: int

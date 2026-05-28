@@ -11,18 +11,41 @@ from app.utils.security import generate_uuid, safe_append_unique, utc_now
 
 
 class FraudService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         fraud_repository: FraudRepository | None = None,
         visitor_repository: VisitorRepository | None = None,
         fraud_event_repository: FraudEventRepository | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            fraud_repository: The fraud repository value used by this operation.
+            visitor_repository: The visitor repository value used by this operation.
+            fraud_event_repository: The fraud event repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
         self.fraud_repository = fraud_repository or FraudRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.fraud_event_repository = fraud_event_repository or FraudEventRepository()
 
     def calculate_risk_level(self, score: int) -> str:
+        """
+        Calculate Risk Level for the requested operation.
+        
+        Args:
+            score: The score value used by this operation.
+        
+        Returns:
+            Operation result represented as `str`.
+        """
         return calculate_risk_level(score)
 
     def detect_vpn_proxy_placeholder(
@@ -30,6 +53,16 @@ class FraudService:
         ip_address: str,
         headers: dict[str, str],
     ) -> bool:
+        """
+        Detect Vpn Proxy Placeholder for the requested operation.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            headers: The headers value used by this operation.
+        
+        Returns:
+            Operation result represented as `bool`.
+        """
         return detect_vpn_proxy_placeholder(ip_address, headers)
 
     def evaluate_reidentification_risk(
@@ -43,6 +76,22 @@ class FraudService:
         user_agent: str,
         headers: dict[str, str],
     ) -> dict[str, Any]:
+        """
+        Evaluate Reidentification Risk for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            cookie_id: Unique cookie identifier used by the operation.
+            local_storage_id: Unique local storage identifier used by the operation.
+            session_id: Unique session identifier used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            ip_address: IP address being analyzed or persisted.
+            user_agent: User-Agent string supplied by the client.
+            headers: The headers value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         events: list[dict[str, Any]] = []
         if visitor is None:
             return {
@@ -176,6 +225,16 @@ class FraudService:
         visitor_id: str | None,
         events: list[dict[str, Any]],
     ) -> None:
+        """
+        Create fraud events for the requested operation.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            events: The events value used by this operation.
+        
+        Returns:
+            None.
+        """
         for event in events:
             event_id = generate_uuid()
             signals = event.get("signals", {})
@@ -224,6 +283,18 @@ class FraudService:
         reason: str,
         risk_score: int,
     ) -> dict[str, Any] | None:
+        """
+        Create blocked entity for the requested operation.
+        
+        Args:
+            entity_type: Blocked-entity type used by the operation.
+            entity_value: The entity value value used by this operation.
+            reason: The reason value used by this operation.
+            risk_score: The risk score value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         existing = await self.fraud_repository.find_active_blocked_entity(
             entity_type=entity_type,
             entity_value=entity_value,
@@ -245,6 +316,12 @@ class FraudService:
         )
 
     async def get_fraud_summary(self) -> FraudSummaryResponse:
+        """
+        Return fraud summary data for the service workflow.
+        
+        Returns:
+            Matching record or value when available.
+        """
         recent_events = await self.fraud_repository.list_fraud_events(limit=10)
         return FraudSummaryResponse(
             total_visitors=await self.visitor_repository.count_visitors(),
@@ -259,6 +336,15 @@ class FraudService:
         self,
         fingerprint_hash: str,
     ) -> dict[str, Any] | None:
+        """
+        Is Fingerprint Blocked for the requested operation.
+        
+        Args:
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+        
+        Returns:
+            `True` when the condition is satisfied, otherwise `False`.
+        """
         return await self.fraud_repository.find_active_blocked_entity(
             entity_type=BlockedEntityType.FINGERPRINT.value,
             entity_value=fingerprint_hash,
@@ -266,6 +352,15 @@ class FraudService:
 
 
 def calculate_risk_level(score: int) -> str:
+    """
+    Calculate Risk Level for the requested operation.
+    
+    Args:
+        score: The score value used by this operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     if score <= 29:
         return "LOW"
     if score <= 59:
@@ -276,6 +371,16 @@ def calculate_risk_level(score: int) -> str:
 
 
 def detect_vpn_proxy_placeholder(ip_address: str, headers: dict[str, str]) -> bool:
+    """
+    Detect Vpn Proxy Placeholder for the requested operation.
+    
+    Args:
+        ip_address: IP address being analyzed or persisted.
+        headers: The headers value used by this operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     del ip_address
     normalized_headers = {key.lower(): value for key, value in headers.items()}
     forwarded_for = normalized_headers.get("x-forwarded-for", "")
@@ -291,6 +396,15 @@ def detect_vpn_proxy_placeholder(ip_address: str, headers: dict[str, str]) -> bo
 
 
 def build_fraud_event_response(event: dict[str, Any]) -> FraudEventResponse:
+    """
+    Build fraud event response data for the service workflow.
+    
+    Args:
+        event: The event value used by this operation.
+    
+    Returns:
+        Constructed result for the requested operation.
+    """
     return FraudEventResponse(
         event_id=event["_id"],
         visitor_id=event.get("visitor_id"),
@@ -310,6 +424,19 @@ def _event(
     message: str,
     signals: dict[str, Any],
 ) -> dict[str, Any]:
+    """
+    Event for the requested operation.
+    
+    Args:
+        event_type: Event type filter or value used by the operation.
+        severity: Severity filter or value used by the operation.
+        risk_points: The risk points value used by this operation.
+        message: The message value used by this operation.
+        signals: The signals value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {
         "event_type": event_type.value,
         "severity": severity.value,
@@ -327,6 +454,20 @@ def _build_signals(
     ip_address: str | None,
     user_agent: str | None,
 ) -> dict[str, str | None]:
+    """
+    Build Signals for the requested operation.
+    
+    Args:
+        cookie_id: Unique cookie identifier used by the operation.
+        local_storage_id: Unique local storage identifier used by the operation.
+        session_id: Unique session identifier used by the operation.
+        fingerprint_hash: Device fingerprint hash associated with the caller.
+        ip_address: IP address being analyzed or persisted.
+        user_agent: User-Agent string supplied by the client.
+    
+    Returns:
+        Operation result represented as `dict[str, str | None]`.
+    """
     return {
         "cookie_id": cookie_id,
         "local_storage_id": local_storage_id,

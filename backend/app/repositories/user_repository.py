@@ -14,24 +14,70 @@ logger = logging.getLogger(__name__)
 
 
 class UserRepository:
+    """
+    Repository that encapsulates database access for the domain model.
+    """
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection used for the requested repository operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return get_database()[USER_COLLECTION]
 
     async def find_by_email(self, email: str) -> dict[str, Any] | None:
+        """
+        Fetch by email data from persistence.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not email:
             return None
         return await self.get_collection().find_one({"email": email})
 
     async def find_by_id(self, user_id: str) -> dict[str, Any] | None:
+        """
+        Fetch by id data from persistence.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not user_id:
             return None
         return await self.get_collection().find_one({"_id": user_id})
 
     async def create_user(self, user_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist user data.
+        
+        Args:
+            user_data: The user data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.get_collection().insert_one(user_data)
         return user_data
 
     async def update_plan(self, user_id: str, plan: str) -> dict[str, Any] | None:
+        """
+        Update persisted plan data.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+            plan: The plan value used by this operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         return await self.get_collection().find_one_and_update(
             {"_id": user_id},
             {"$set": {"plan": plan, "updated_at": utc_now()}},
@@ -39,6 +85,15 @@ class UserRepository:
         )
 
     async def update_last_login(self, user_id: str) -> dict[str, Any] | None:
+        """
+        Update persisted last login data.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         now = utc_now()
         return await self.get_collection().find_one_and_update(
             {"_id": user_id},
@@ -47,6 +102,15 @@ class UserRepository:
         )
 
     async def mark_email_verified(self, user_id: str) -> dict[str, Any] | None:
+        """
+        Mark persisted email verified data with the requested state.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         now = utc_now()
         return await self.get_collection().find_one_and_update(
             {"_id": user_id},
@@ -66,6 +130,16 @@ class UserRepository:
         user_id: str,
         visitor_id: str,
     ) -> dict[str, Any] | None:
+        """
+        Link Visitor for the requested operation.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         if not user_id or not visitor_id:
             return await self.find_by_id(user_id)
         return await self.get_collection().find_one_and_update(
@@ -84,6 +158,18 @@ class UserRepository:
         device_profile_hash: str | None,
         ip_address: str | None,
     ) -> dict[str, Any] | None:
+        """
+        Add Device Link for the requested operation.
+        
+        Args:
+            user_id: Unique user identifier used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            device_profile_hash: Hash value representing device profile.
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Updated result of the operation.
+        """
         add_to_set: dict[str, Any] = {}
         if fingerprint_hash:
             add_to_set["fingerprint_hashes"] = fingerprint_hash
@@ -106,6 +192,17 @@ class UserRepository:
         device_profile_hash: str | None,
         hours: int = 24,
     ) -> int:
+        """
+        Count recent by device records that match the requested filters.
+        
+        Args:
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            device_profile_hash: Hash value representing device profile.
+            hours: The hours value used by this operation.
+        
+        Returns:
+            Total number of matching records.
+        """
         clauses = []
         if fingerprint_hash:
             clauses.append({"fingerprint_hashes": fingerprint_hash})
@@ -121,6 +218,16 @@ class UserRepository:
         )
 
     async def count_recent_by_ip(self, ip_address: str | None, hours: int = 24) -> int:
+        """
+        Count recent by ip records that match the requested filters.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            hours: The hours value used by this operation.
+        
+        Returns:
+            Total number of matching records.
+        """
         if not ip_address:
             return 0
         return await self.get_collection().count_documents(
@@ -135,6 +242,16 @@ class UserRepository:
         visitor_ids: list[str],
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        """
+        List by linked visitor ids records that match the requested filters.
+        
+        Args:
+            visitor_ids: Collection of visitor identifiers processed by the operation.
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         if not visitor_ids:
             return []
         cursor = (
@@ -147,6 +264,12 @@ class UserRepository:
 
 
 async def ensure_user_indexes() -> None:
+    """
+    Ensure the required database indexes exist for this repository.
+    
+    Returns:
+        None.
+    """
     collection = UserRepository().get_collection()
     await collection.create_index(
         [("email", ASCENDING)],
@@ -185,6 +308,12 @@ async def ensure_user_indexes() -> None:
 
 
 async def seed_default_admin() -> None:
+    """
+    Seed Default Admin for the requested operation.
+    
+    Returns:
+        None.
+    """
     from app.config import get_settings
     from app.core.auth import hash_password
     from app.utils.security import generate_uuid

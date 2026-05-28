@@ -13,7 +13,7 @@ from app.services.anonymous_usage_service import AnonymousUsageService
 from app.services.rate_limit_service import RateLimitService, client_ip
 from app.services.visitor_service import VisitorService
 
-router = APIRouter(prefix="/api/visitor", tags=["Visitor"])
+router = APIRouter(prefix="/visitor", tags=["Visitor"])
 visitor_service = VisitorService()
 rate_limit_service = RateLimitService()
 anonymous_usage_service = AnonymousUsageService()
@@ -29,6 +29,17 @@ async def identify_visitor(
     request: Request,
     response: Response,
 ) -> VisitorIdentifyResponse:
+    """
+    Resolve or create the anonymous visitor identity for the current browser.
+
+    Args:
+        payload: Browser and device continuity signals from the frontend.
+        request: Incoming HTTP request used for risk checks and rate limiting.
+        response: Outgoing response used to set the anonymous visitor cookie.
+
+    Returns:
+        Visitor identifier and readiness status for PDF generation.
+    """
     started_at = perf_counter()
     try:
         await rate_limit_service.check(
@@ -56,11 +67,20 @@ async def identify_visitor(
     finally:
         duration_ms = (perf_counter() - started_at) * 1000
         if duration_ms >= SLOW_ENDPOINT_MS:
-            logger.info("Slow endpoint path=/api/visitor/identify duration_ms=%.2f", duration_ms)
+            logger.info("Slow endpoint path=%s duration_ms=%.2f", request.url.path, duration_ms)
 
 
 @router.get("/status", response_model=VisitorStatusResponse)
 async def visitor_status(request: Request) -> VisitorStatusResponse:
+    """
+    Return the anonymous visitor's remaining free usage status.
+
+    Args:
+        request: Incoming HTTP request used to resolve visitor identity.
+
+    Returns:
+        Remaining quota, blocking state, and login requirement details.
+    """
     started_at = perf_counter()
     try:
         await rate_limit_service.check(
@@ -95,4 +115,4 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
     finally:
         duration_ms = (perf_counter() - started_at) * 1000
         if duration_ms >= SLOW_ENDPOINT_MS:
-            logger.info("Slow endpoint path=/api/visitor/status duration_ms=%.2f", duration_ms)
+            logger.info("Slow endpoint path=%s duration_ms=%.2f", request.url.path, duration_ms)

@@ -14,6 +14,12 @@ settings = get_settings()
 
 @router.get("/health")
 async def health() -> dict[str, str | int]:
+    """
+    Return a lightweight service health summary.
+
+    Returns:
+        Basic application metadata and the listening port.
+    """
     return {
         "status": "ok",
         "service": settings.APP_NAME,
@@ -24,11 +30,23 @@ async def health() -> dict[str, str | int]:
 
 @router.get("/live")
 async def live() -> dict[str, str]:
+    """
+    Return a liveness response for container orchestrators.
+
+    Returns:
+        Static alive status when the process is running.
+    """
     return {"status": "alive"}
 
 
 @router.get("/ready")
 async def ready() -> JSONResponse:
+    """
+    Run dependency and storage readiness checks.
+
+    Returns:
+        JSON response describing readiness and individual subsystem checks.
+    """
     checks: dict[str, bool | str] = {}
 
     try:
@@ -57,6 +75,12 @@ async def ready() -> JSONResponse:
 
 @router.get("/health/db")
 async def health_db() -> JSONResponse:
+    """
+    Verify that MongoDB is reachable.
+
+    Returns:
+        Health response for the MongoDB dependency.
+    """
     try:
         await ping_mongo()
     except Exception as exc:
@@ -79,6 +103,15 @@ async def health_db() -> JSONResponse:
 
 
 def _directory_writable(path: str) -> bool | str:
+    """
+    Check whether the configured storage directory is writable.
+
+    Args:
+        path: Filesystem directory path to validate.
+
+    Returns:
+        True when the directory is writable, otherwise a failure message.
+    """
     try:
         directory = Path(path)
         directory.mkdir(parents=True, exist_ok=True)
@@ -90,6 +123,15 @@ def _directory_writable(path: str) -> bool | str:
 
 
 def _directory_readable(path: str) -> bool | str:
+    """
+    Check whether the configured model directory is readable.
+
+    Args:
+        path: Filesystem directory path to validate.
+
+    Returns:
+        True when the directory is readable, otherwise a failure message.
+    """
     try:
         directory = Path(path)
         directory.mkdir(parents=True, exist_ok=True)
@@ -105,6 +147,12 @@ def _directory_readable(path: str) -> bool | str:
 
 @router.get("/health/redis")
 async def health_redis() -> JSONResponse:
+    """
+    Verify that Redis is reachable.
+
+    Returns:
+        Health response for the Redis dependency.
+    """
     try:
         await ping_redis()
     except Exception as exc:

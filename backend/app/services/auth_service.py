@@ -38,6 +38,9 @@ from app.utils.security import generate_uuid, normalize_ip, utc_now
 
 
 class AuthService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         user_repository: UserRepository | None = None,
@@ -50,6 +53,23 @@ class AuthService:
         fraud_engine_decision_service: FraudEngineDecisionService | None = None,
         email_verification_service: EmailVerificationService | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            user_repository: The user repository value used by this operation.
+            visitor_repository: The visitor repository value used by this operation.
+            pdf_repository: The pdf repository value used by this operation.
+            fraud_service: The fraud service value used by this operation.
+            fraud_event_service: The fraud event service value used by this operation.
+            identity_link_repository: The identity link repository value used by this operation.
+            token_service: The token service value used by this operation.
+            fraud_engine_decision_service: The fraud engine decision service value used by this operation.
+            email_verification_service: The email verification service value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.user_repository = user_repository or UserRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.pdf_repository = pdf_repository or PDFRepository()
@@ -63,6 +83,15 @@ class AuthService:
         )
 
     def build_user_response(self, user: dict[str, Any]) -> UserResponse:
+        """
+        Build user response data for the service workflow.
+        
+        Args:
+            user: User record involved in the operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         return build_user_response(user)
 
     async def register_user(
@@ -70,6 +99,19 @@ class AuthService:
         payload: UserRegisterRequest,
         request: Request,
     ) -> RegisterResponse:
+        """
+        Register a user account and trigger the required verification workflow.
+        
+        Args:
+            payload: Validated request payload for this operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Operation result represented as `RegisterResponse`.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         email = self.email_verification_service.normalize_and_validate_email(str(payload.email))
         existing_user = await self.user_repository.find_by_email(email)
         if existing_user is not None:
@@ -149,6 +191,19 @@ class AuthService:
         payload: UserLoginRequest,
         request: Request,
     ) -> AuthResponse:
+        """
+        Authenticate a user and build the login response.
+        
+        Args:
+            payload: Validated request payload for this operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Operation result represented as `AuthResponse`.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         email = _normalize_email(str(payload.email))
         user = await self.user_repository.find_by_email(email)
         if user is None or not verify_password(payload.password, user["password_hash"]):
@@ -179,6 +234,15 @@ class AuthService:
         return await self._build_auth_response(user, "Logged in successfully.")
 
     def get_me(self, current_user: dict[str, Any]) -> MeResponse:
+        """
+        Return me data for the service workflow.
+        
+        Args:
+            current_user: Authenticated user document resolved for the current request.
+        
+        Returns:
+            Matching record or value when available.
+        """
         user = self.build_user_response(current_user)
         return MeResponse(
             id=user.id,
@@ -191,6 +255,15 @@ class AuthService:
         )
 
     async def verify_email(self, payload: VerifyEmailRequest) -> VerificationResponse:
+        """
+        Verify the submitted code or identity data for the workflow.
+        
+        Args:
+            payload: Validated request payload for this operation.
+        
+        Returns:
+            Outcome of the requested operation.
+        """
         await self.email_verification_service.verify_email(email=payload.email, code=payload.code)
         return VerificationResponse(
             success=True,
@@ -201,6 +274,15 @@ class AuthService:
         self,
         payload: ResendVerificationRequest,
     ) -> VerificationResponse:
+        """
+        Resend the required verification or notification data.
+        
+        Args:
+            payload: Validated request payload for this operation.
+        
+        Returns:
+            Operation result represented as `VerificationResponse`.
+        """
         await self.email_verification_service.resend_verification(email=payload.email)
         return VerificationResponse(
             success=True,
@@ -208,6 +290,15 @@ class AuthService:
         )
 
     async def refresh(self, payload: RefreshTokenRequest) -> TokenRefreshResponse:
+        """
+        Refresh the caller credentials or cached service state.
+        
+        Args:
+            payload: Validated request payload for this operation.
+        
+        Returns:
+            Operation result represented as `TokenRefreshResponse`.
+        """
         access_token, refresh_token = await self.token_service.refresh_token_pair(
             payload.refresh_token
         )
@@ -217,10 +308,29 @@ class AuthService:
         )
 
     async def logout(self, payload: LogoutRequest) -> dict[str, bool | str]:
+        """
+        Invalidate the caller session or refresh token.
+        
+        Args:
+            payload: Validated request payload for this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, bool | str]`.
+        """
         await self.token_service.revoke_refresh_token(payload.refresh_token)
         return {"success": True, "message": "Logged out successfully."}
 
     async def _build_auth_response(self, user: dict[str, Any], message: str) -> AuthResponse:
+        """
+        Build Auth Response for the requested operation.
+        
+        Args:
+            user: User record involved in the operation.
+            message: The message value used by this operation.
+        
+        Returns:
+            Operation result represented as `AuthResponse`.
+        """
         access_token, refresh_token = await self.token_service.create_token_pair(user)
         return AuthResponse(
             success=True,
@@ -237,6 +347,18 @@ class AuthService:
         audit_message: str,
         is_registration: bool,
     ) -> dict[str, Any] | None:
+        """
+        Link Request Visitor for the requested operation.
+        
+        Args:
+            user: User record involved in the operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            audit_message: Audit log message recorded for the action.
+            is_registration: Whether the current flow originated from account registration.
+        
+        Returns:
+            Operation result represented as `dict[str, Any] | None`.
+        """
         cookie_id = get_visitor_cookie(request.cookies)
         visitor = await self.visitor_repository.find_by_cookie_id(cookie_id)
         if visitor is None:
@@ -316,6 +438,17 @@ class AuthService:
         visitor: dict[str, Any],
         user_id: str,
     ) -> None:
+        """
+        Emit Account Registration Events for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            visitor: Visitor record involved in the operation.
+            user_id: Unique user identifier used by the operation.
+        
+        Returns:
+            None.
+        """
         ip_address = normalize_ip(client_ip(request))
         fingerprint_hash = visitor.get("primary_fingerprint_hash")
         device_profile_hash = _last(visitor.get("device_profile_hashes", []))
@@ -405,6 +538,15 @@ class AuthService:
 
 
 def build_user_response(user: dict[str, Any]) -> UserResponse:
+    """
+    Build user response data for the service workflow.
+    
+    Args:
+        user: User record involved in the operation.
+    
+    Returns:
+        Constructed result for the requested operation.
+    """
     return UserResponse(
         id=user["_id"],
         user_id=user["_id"],
@@ -419,12 +561,39 @@ def build_user_response(user: dict[str, Any]) -> UserResponse:
 
 
 def _normalize_email(email: str) -> str:
+    """
+    Normalize Email for the requested operation.
+    
+    Args:
+        email: Email address used for lookup, verification, or delivery.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     return email.strip().lower()
 
 
 def _is_email_verified(user: dict[str, Any]) -> bool:
+    """
+    Is Email Verified for the requested operation.
+    
+    Args:
+        user: User record involved in the operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     return bool(user.get("email_verified", user.get("is_verified", False)))
 
 
 def _last(values: list[Any]) -> Any:
+    """
+    Last for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `Any`.
+    """
     return values[-1] if values else None

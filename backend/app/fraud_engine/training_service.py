@@ -15,11 +15,24 @@ from app.utils.security import utc_now
 
 
 class TrainingService:
+    """
+    Fraud-detection component used to score, classify, or train signals.
+    """
     def __init__(
         self,
         repository: FraudEngineRepository | None = None,
         registry: ModelRegistry | None = None,
     ) -> None:
+        """
+        Initialize the fraud-detection component and its collaborators.
+        
+        Args:
+            repository: The repository value used by this operation.
+            registry: The registry value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.repository = repository or FraudEngineRepository()
         self.registry = registry or ModelRegistry(repository=self.repository)
 
@@ -31,6 +44,19 @@ class TrainingService:
         min_confidence: float = 0.70,
         model_type: str = "random_forest",
     ) -> dict[str, Any]:
+        """
+        Train for the requested operation.
+        
+        Args:
+            synthetic_csv: The synthetic csv value used by this operation.
+            demo: The demo value used by this operation.
+            auto_activate: The auto activate value used by this operation.
+            min_confidence: Minimum confidence value allowed for the operation.
+            model_type: The model type value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         started_at = utc_now()
         dataset = await self._load_dataset(
             synthetic_csv=synthetic_csv,
@@ -149,6 +175,17 @@ class TrainingService:
         demo: bool,
         min_confidence: float,
     ) -> dict[str, Any]:
+        """
+        Load Dataset for the requested operation.
+        
+        Args:
+            synthetic_csv: The synthetic csv value used by this operation.
+            demo: The demo value used by this operation.
+            min_confidence: Minimum confidence value allowed for the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         if synthetic_csv or demo:
             path = Path(synthetic_csv or "data/synthetic_fraud_dataset.csv")
             if not path.exists():
@@ -188,6 +225,15 @@ class TrainingService:
 
 
 def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize Dataframe for the requested operation.
+    
+    Args:
+        df: The df value used by this operation.
+    
+    Returns:
+        Operation result represented as `pd.DataFrame`.
+    """
     for column in FEATURE_COLUMNS:
         if column not in df.columns:
             df[column] = 0
@@ -197,6 +243,15 @@ def _normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _passes_activation(metrics: dict[str, Any]) -> bool:
+    """
+    Passes Activation for the requested operation.
+    
+    Args:
+        metrics: The metrics value used by this operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     return (
         float(metrics.get("f1_score") or 0) >= 0.70
         and float(metrics.get("precision") or 0) >= 0.65

@@ -17,6 +17,9 @@ from app.utils.security import generate_uuid, utc_now
 
 
 class FraudEngineDecisionService:
+    """
+    Fraud-detection component used to score, classify, or train signals.
+    """
     def __init__(
         self,
         repository: FraudEngineRepository | None = None,
@@ -27,6 +30,21 @@ class FraudEngineDecisionService:
         fraud_event_service: FraudEventService | None = None,
         ml_model: Any | None = None,
     ) -> None:
+        """
+        Initialize the fraud-detection component and its collaborators.
+        
+        Args:
+            repository: The repository value used by this operation.
+            feature_builder: The feature builder value used by this operation.
+            rule_engine: The rule engine value used by this operation.
+            visitor_repository: The visitor repository value used by this operation.
+            snapshot_repository: The snapshot repository value used by this operation.
+            fraud_event_service: The fraud event service value used by this operation.
+            ml_model: The ml model value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
         self.repository = repository or FraudEngineRepository()
         self.feature_builder = feature_builder or FeatureBuilder(repository=self.repository)
@@ -46,6 +64,21 @@ class FraudEngineDecisionService:
         context: dict[str, Any] | None = None,
         normal_flow: bool = False,
     ) -> FraudDecisionResult:
+        """
+        Evaluate the supplied context and return the resulting decision.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            action_type: The action type value used by this operation.
+            user: User record involved in the operation.
+            payload: Validated request payload for this operation.
+            context: Additional contextual data that influences the operation.
+            normal_flow: Whether the call should follow the expected non-exceptional path.
+        
+        Returns:
+            Computed result for the supplied input.
+        """
         features = await self.feature_builder.build(
             visitor=visitor,
             request=request,
@@ -172,6 +205,16 @@ class FraudEngineDecisionService:
 
 
 def _decision_for_score(score: int, is_logged_in: bool) -> str:
+    """
+    Decision For Score for the requested operation.
+    
+    Args:
+        score: The score value used by this operation.
+        is_logged_in: Boolean flag indicating whether logged in should be applied.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     if score <= 29:
         return "ALLOW"
     if score <= 59:
@@ -182,6 +225,17 @@ def _decision_for_score(score: int, is_logged_in: bool) -> str:
 
 
 def _final_score(rule_score: int, ml_result: Any, features: dict[str, Any]) -> int:
+    """
+    Final Score for the requested operation.
+    
+    Args:
+        rule_score: The rule score value used by this operation.
+        ml_result: The ml result value used by this operation.
+        features: The features value used by this operation.
+    
+    Returns:
+        Operation result represented as `int`.
+    """
     ml_score = max(
         int(float(getattr(ml_result, "fraud_probability", 0) or 0) * 100),
         int(float(getattr(ml_result, "anomaly_score", 0) or 0) * 100),
@@ -197,6 +251,15 @@ def _final_score(rule_score: int, ml_result: Any, features: dict[str, Any]) -> i
 
 
 def _has_supporting_ml_signals(features: dict[str, Any]) -> bool:
+    """
+    Has Supporting Ml Signals for the requested operation.
+    
+    Args:
+        features: The features value used by this operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     numeric_thresholds = {
         "blocked_attempts": 1,
         "repeated_blocked_attempts": 1,
@@ -226,6 +289,15 @@ def _has_supporting_ml_signals(features: dict[str, Any]) -> bool:
 
 
 def _severity_for_level(level: str) -> str:
+    """
+    Severity For Level for the requested operation.
+    
+    Args:
+        level: The level value used by this operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     if level == "CRITICAL":
         return FraudSeverity.CRITICAL.value
     if level == "HIGH":
@@ -236,4 +308,13 @@ def _severity_for_level(level: str) -> str:
 
 
 def _last(values: list[Any]) -> Any:
+    """
+    Last for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `Any`.
+    """
     return values[-1] if values else None

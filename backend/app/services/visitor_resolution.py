@@ -17,15 +17,37 @@ _RESOLUTION_CONTEXT_STATE_KEY = "_pdfcraft_resolution_context"
 
 
 class VisitorResolutionService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         repository: VisitorRepository | None = None,
         fraud_event_service: FraudEventService | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+            fraud_event_service: The fraud event service value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.repository = repository or VisitorRepository()
         self.fraud_event_service = fraud_event_service or FraudEventService()
 
     async def resolve(self, request: Request) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """
+        Resolve for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Operation result represented as `tuple[dict[str, Any] | None, dict[str, Any]]`.
+        """
         cached_visitor = getattr(request.state, _RESOLVED_VISITOR_STATE_KEY, None)
         cached_context = getattr(request.state, _RESOLUTION_CONTEXT_STATE_KEY, None)
         if cached_context is not None:
@@ -87,6 +109,15 @@ class VisitorResolutionService:
         self,
         request_context: dict[str, Any],
     ) -> dict[str, Any] | None:
+        """
+        Find Final Fallback for the requested operation.
+        
+        Args:
+            request_context: The request context value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any] | None`.
+        """
         fingerprint_hash = request_context["fingerprint_hash"]
         ip_address = request_context["ip_address"]
         user_agent = request_context["user_agent"]
@@ -111,6 +142,17 @@ class VisitorResolutionService:
         request_context: dict[str, Any],
         source: str,
     ) -> dict[str, Any]:
+        """
+        Refresh Seen Signals for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            request_context: The request context value used by this operation.
+            source: The source value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         now = utc_now()
         ip_address = request_context["ip_address"]
         session_id = request_context["session_id"]
@@ -173,6 +215,15 @@ class VisitorResolutionService:
         return resolved_visitor
 
     def _request_context(self, request: Request) -> dict[str, Any]:
+        """
+        Request Context for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         ip_details = get_client_ip_details(request)
         return {
             "anon_id": get_visitor_cookie(request.cookies) or request.headers.get("X-Anon-Id"),

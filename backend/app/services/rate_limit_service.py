@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimitService:
+    """Enforce Redis-backed rate limits for backend endpoints."""
+
     async def check(
         self,
         request: Request,
@@ -19,6 +21,21 @@ class RateLimitService:
         identifier: str,
         rate: str,
     ) -> None:
+        """
+        Enforce a configured rate limit for a bucket and identifier.
+
+        Args:
+            request: Incoming request associated with the rate-limited action.
+            bucket: Logical bucket name for the protected action.
+            identifier: Client-specific identifier used as the limit key.
+            rate: Rate-limit string such as ``"30/minute"``.
+
+        Returns:
+            None. The request is allowed when no exception is raised.
+
+        Raises:
+            HTTPException: If the identifier exceeds the configured rate limit.
+        """
         if not get_settings().RATE_LIMIT_ENABLED:
             return
         parsed = parse_rate_limit(rate)
@@ -44,4 +61,13 @@ class RateLimitService:
 
 
 def client_ip(request: Request) -> str:
+    """
+    Return the normalized client IP used for rate limiting and fraud analysis.
+
+    Args:
+        request: Incoming HTTP request whose client IP should be resolved.
+
+    Returns:
+        Resolved client IP string.
+    """
     return get_client_ip(request)

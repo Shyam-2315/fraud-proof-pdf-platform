@@ -38,11 +38,12 @@ export default function GeneratePage() {
   useEffect(() => {
     async function load() {
       try {
-        await sendBehaviorEvent("PAGE_VIEW", { page: "generate" });
         if (!isAuthenticated) {
           await ensureVisitorIdentified();
+          await sendBehaviorEvent("PAGE_VIEW", { page: "generate" });
           await refreshStatus();
         } else {
+          await sendBehaviorEvent("PAGE_VIEW", { page: "generate" });
           setStatus(null);
         }
       } catch (err) {

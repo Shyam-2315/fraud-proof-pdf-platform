@@ -5,6 +5,9 @@ VISITOR_IDENTITY_LINKS_COLLECTION = "visitor_identity_links"
 
 
 class IdentityLinkType(StrEnum):
+    """
+    Model describing the identity link type domain object.
+    """
     COOKIE_MATCH = "COOKIE_MATCH"
     LOCAL_STORAGE_MATCH = "LOCAL_STORAGE_MATCH"
     FINGERPRINT_MATCH = "FINGERPRINT_MATCH"

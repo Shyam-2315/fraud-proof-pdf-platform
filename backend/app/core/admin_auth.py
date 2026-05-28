@@ -15,6 +15,19 @@ async def require_admin_api_key(
         description="Admin API key for fraud monitoring endpoints.",
     ),
 ) -> None:
+    """
+    Authorize an admin request using either an API key or admin bearer token.
+
+    Args:
+        request: Incoming HTTP request for an admin-only endpoint.
+        x_admin_api_key: Optional admin API key header value.
+
+    Returns:
+        None. The request is authorized when no exception is raised.
+
+    Raises:
+        HTTPException: If the caller is not authorized for admin access.
+    """
     if x_admin_api_key is not None:
         expected_key = get_settings().ADMIN_API_KEY
         if compare_digest(x_admin_api_key, expected_key):

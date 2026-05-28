@@ -11,10 +11,27 @@ logger = logging.getLogger(__name__)
 
 
 class RiskScoreSnapshotRepository:
+    """Persist and query fraud risk score snapshots."""
+
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection storing risk score snapshots.
+
+        Returns:
+            Motor collection for risk snapshot documents.
+        """
         return get_database()[RISK_SCORE_SNAPSHOTS_COLLECTION]
 
     async def create(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        """
+        Insert a risk score snapshot document.
+
+        Args:
+            snapshot: Snapshot payload to persist.
+
+        Returns:
+            Inserted risk snapshot document.
+        """
         await self.get_collection().insert_one(snapshot)
         return snapshot
 
@@ -23,6 +40,16 @@ class RiskScoreSnapshotRepository:
         visitor_id: str,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
+        """
+        Return recent risk score snapshots for a visitor.
+
+        Args:
+            visitor_id: Visitor whose snapshots should be listed.
+            limit: Maximum number of snapshots to return.
+
+        Returns:
+            Recent risk snapshot documents for the visitor.
+        """
         cursor = (
             self.get_collection()
             .find({"visitor_id": visitor_id})
@@ -33,10 +60,27 @@ class RiskScoreSnapshotRepository:
 
 
 class IPIntelligenceRepository:
+    """Persist and query cached IP intelligence records."""
+
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection storing IP intelligence records.
+
+        Returns:
+            Motor collection for IP intelligence documents.
+        """
         return get_database()[IP_INTELLIGENCE_COLLECTION]
 
     async def upsert(self, record: dict[str, Any]) -> dict[str, Any]:
+        """
+        Upsert a cached IP intelligence record by IP address.
+
+        Args:
+            record: IP intelligence payload to insert or update.
+
+        Returns:
+            Updated IP intelligence document after the upsert.
+        """
         insert_fields = {
             "_id": record.pop("_id", record.get("id")),
             "id": record.pop("id", record.get("_id")),
@@ -49,11 +93,29 @@ class IPIntelligenceRepository:
         )
 
     async def get_by_ip(self, ip_address: str) -> dict[str, Any] | None:
+        """
+        Return a cached IP intelligence record for a single IP.
+
+        Args:
+            ip_address: IP address to look up.
+
+        Returns:
+            Matching cached IP intelligence document, or ``None``.
+        """
         if not ip_address:
             return None
         return await self.get_collection().find_one({"ip_address": ip_address})
 
     async def list_by_ips(self, ip_addresses: list[str]) -> list[dict[str, Any]]:
+        """
+        Return cached IP intelligence records for multiple IP addresses.
+
+        Args:
+            ip_addresses: IP addresses to look up.
+
+        Returns:
+            Cached IP intelligence documents for matching IP addresses.
+        """
         if not ip_addresses:
             return []
         cursor = self.get_collection().find({"ip_address": {"$in": ip_addresses}})
@@ -61,6 +123,7 @@ class IPIntelligenceRepository:
 
 
 async def ensure_risk_indexes() -> None:
+    """Create MongoDB indexes required for risk snapshot and IP intelligence queries."""
     snapshots = RiskScoreSnapshotRepository().get_collection()
     await snapshots.create_index(
         [("visitor_id", ASCENDING)],

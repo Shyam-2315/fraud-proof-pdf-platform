@@ -6,6 +6,18 @@ def weak_label_from_rule_score(
     features: dict[str, Any],
     normal_flow: bool = False,
 ) -> dict[str, Any]:
+    """
+    Derive a weak training label from rule-engine output and supporting features.
+
+    Args:
+        rule_score: Fraud rule score computed for the action.
+        features: Fraud feature snapshot associated with the action.
+        normal_flow: Whether the action occurred in a customer flow already considered normal.
+
+    Returns:
+        Weak-label payload containing the label, source, and confidence used for
+        fraud-training events.
+    """
     same_ip_only = (
         int(features.get("num_ip_addresses", 0)) > 0
         and int(features.get("num_cookie_ids", 0)) <= 1

@@ -4,11 +4,20 @@ from typing import Any
 
 @dataclass(frozen=True)
 class RiskDecision:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     decision: str
     reasons: list[dict[str, Any]]
     score: int
 
     def as_dict(self) -> dict[str, Any]:
+        """
+        As Dict for the requested operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         return {
             "decision": self.decision,
             "reasons": self.reasons,
@@ -17,7 +26,19 @@ class RiskDecision:
 
 
 class RiskEngine:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def decide(self, signals: dict[str, Any]) -> RiskDecision:
+        """
+        Evaluate the supplied context and return the resulting decision.
+        
+        Args:
+            signals: The signals value used by this operation.
+        
+        Returns:
+            Computed result for the supplied input.
+        """
         reasons: list[dict[str, Any]] = []
         score = 0
 

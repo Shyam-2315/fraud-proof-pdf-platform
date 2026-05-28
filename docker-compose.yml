@@ -5,6 +5,8 @@ services:
     container_name: fraud-pdf-backend
     env_file:
       - ./backend/.env
+    environment:
+      APP_ENV: local
     ports:
       - "8025:8025"
     depends_on:

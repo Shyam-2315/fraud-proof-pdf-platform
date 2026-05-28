@@ -32,6 +32,8 @@ services:
     container_name: fraud-pdf-backend
     env_file:
       - ${BACKEND_ENV_FILE:-./backend/.env.production.example}
+    environment:
+      APP_ENV: production
     command:
       - sh
       - -c

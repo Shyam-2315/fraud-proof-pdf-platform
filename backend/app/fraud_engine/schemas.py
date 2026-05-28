@@ -51,35 +51,68 @@ FEATURE_COLUMNS = [
 
 @dataclass
 class RuleReason:
+    """Single rule-engine reason contributing to a fraud score."""
+
     code: str
     message: str
     points: int
 
     def as_dict(self) -> dict[str, Any]:
+        """
+        Serialize the rule reason to a plain dictionary.
+
+        Returns:
+            Dictionary representation of the rule reason.
+        """
         return {"code": self.code, "message": self.message, "points": self.points}
 
 
 @dataclass
 class RuleResult:
+    """Structured result returned by the deterministic fraud rule engine."""
+
     rule_score: int
     reasons: list[RuleReason] = field(default_factory=list)
     signals: dict[str, Any] = field(default_factory=dict)
 
     def reason_dicts(self) -> list[dict[str, Any]]:
+        """
+        Serialize all rule reasons to dictionaries.
+
+        Returns:
+            List of serialized rule reasons.
+        """
         return [reason.as_dict() for reason in self.reasons]
 
     def as_dict(self) -> dict[str, Any]:
+        """
+        Serialize the rule result for API responses or persistence.
+
+        Returns:
+            Dictionary containing the rule score and triggered reasons.
+        """
         return {
             "rule_score": self.rule_score,
             "reasons": self.reason_dicts(),
         }
 
     def __getitem__(self, key: str) -> Any:
+        """
+        Allow dictionary-style access to the serialized rule result.
+
+        Args:
+            key: Serialized result key to retrieve.
+
+        Returns:
+            Serialized value for the requested key.
+        """
         return self.as_dict()[key]
 
 
 @dataclass
 class MLResult:
+    """Advisory fraud-ML prediction output used by the decision engine."""
+
     fraud_probability: float = 0.0
     anomaly_score: float = 0.0
     model_version: str = "none"
@@ -87,6 +120,8 @@ class MLResult:
 
 @dataclass
 class FraudDecisionResult:
+    """Combined fraud decision returned by the rule and ML decision pipeline."""
+
     fraud_probability: float
     anomaly_score: float
     rule_score: int
@@ -98,6 +133,12 @@ class FraudDecisionResult:
     decision_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
+        """
+        Serialize the fraud decision result to a plain dictionary.
+
+        Returns:
+            Dictionary representation of the final fraud decision.
+        """
         return {
             "fraud_probability": self.fraud_probability,
             "anomaly_score": self.anomaly_score,
@@ -112,10 +153,28 @@ class FraudDecisionResult:
         }
 
     def __getitem__(self, key: str) -> Any:
+        """
+        Allow dictionary-style access to the serialized decision result.
+
+        Args:
+            key: Serialized result key to retrieve.
+
+        Returns:
+            Serialized value for the requested key.
+        """
         return self.as_dict()[key]
 
 
 def risk_level_for_score(score: int) -> RiskLevel:
+    """
+    Map a numeric risk score to the configured risk-level buckets.
+
+    Args:
+        score: Final fraud risk score from 0 to 100.
+
+    Returns:
+        Risk level label corresponding to the score bucket.
+    """
     if score <= 29:
         return "LOW"
     if score <= 59:

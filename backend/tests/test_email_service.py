@@ -63,20 +63,20 @@ class _FakeBrevoClient:
 
 
 def _build_email_service(monkeypatch, **env: str) -> EmailService:
-    apply_test_env(
-        monkeypatch,
-        APP_ENV="development",
-        EMAIL_PROVIDER="SMTP",
-        SMTP_HOST="smtp.gmail.com",
-        SMTP_PORT="587",
-        SMTP_USERNAME="mailer@example.com",
-        SMTP_PASSWORD="super-secret-password",
-        SMTP_FROM_EMAIL="noreply@example.com",
-        SMTP_FROM_NAME="PDFCraft",
-        SMTP_USE_TLS="true",
-        SMTP_USE_SSL="false",
-        **env,
-    )
+    config = {
+        "APP_ENV": "development",
+        "EMAIL_PROVIDER": "SMTP",
+        "SMTP_HOST": "smtp.gmail.com",
+        "SMTP_PORT": "587",
+        "SMTP_USERNAME": "mailer@example.com",
+        "SMTP_PASSWORD": "super-secret-password",
+        "SMTP_FROM_EMAIL": "noreply@example.com",
+        "SMTP_FROM_NAME": "PDFCraft",
+        "SMTP_USE_TLS": "true",
+        "SMTP_USE_SSL": "false",
+    }
+    config.update(env)
+    apply_test_env(monkeypatch, **config)
     return EmailService()
 
 
@@ -157,7 +157,11 @@ def test_send_verification_code_logs_safe_failure_details(monkeypatch, caplog) -
     def fake_send(_: EmailMessage) -> None:
         raise RuntimeError(f"login failed password=super-secret-password otp={otp_code}")
 
+    async def fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
     monkeypatch.setattr(service, "_send_smtp_message", fake_send)
+    monkeypatch.setattr(asyncio, "to_thread", fake_to_thread)
 
     with caplog.at_level(logging.ERROR):
         with pytest.raises(HTTPException) as exc_info:

@@ -4,6 +4,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class DeviceInfo(BaseModel):
+    """
+    Schema describing the device info payload.
+    """
     model_config = ConfigDict(extra="allow")
 
     screen: str = ""
@@ -16,6 +19,9 @@ class DeviceInfo(BaseModel):
 
 
 class AutomationSignals(BaseModel):
+    """
+    Schema describing the automation signals payload.
+    """
     model_config = ConfigDict(extra="allow")
 
     webdriver: bool = False
@@ -26,6 +32,9 @@ class AutomationSignals(BaseModel):
 
 
 class VisitorIdentifyRequest(BaseModel):
+    """
+    Schema describing the visitor identify request payload.
+    """
     local_storage_id: str = Field(min_length=1, max_length=256)
     session_id: str = Field(min_length=1, max_length=256)
     fingerprint_hash: str = Field(min_length=1, max_length=512)
@@ -38,12 +47,18 @@ class VisitorIdentifyRequest(BaseModel):
 
 
 class VisitorIdentifyResponse(BaseModel):
+    """
+    Schema describing the visitor identify response payload.
+    """
     success: bool
     visitor_id: str
     message: str
 
 
 class VisitorStatusResponse(BaseModel):
+    """
+    Schema describing the visitor status response payload.
+    """
     visitor_id: str
     used: int
     remaining: int

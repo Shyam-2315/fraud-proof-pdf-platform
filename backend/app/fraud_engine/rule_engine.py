@@ -4,10 +4,29 @@ from app.fraud_engine.schemas import RuleReason, RuleResult
 
 
 class RuleEngine:
+    """Apply deterministic fraud rules to a feature snapshot."""
+
     def evaluate(self, features: dict[str, Any]) -> RuleResult:
+        """
+        Score a feature set using deterministic fraud-detection rules.
+
+        Args:
+            features: Fraud feature snapshot built for the current action.
+
+        Returns:
+            Rule result containing the aggregated rule score and triggered reasons.
+        """
         reasons: list[RuleReason] = []
 
         def add(code: str, message: str, points: int) -> None:
+            """
+            Record a triggered fraud rule reason.
+
+            Args:
+                code: Stable machine-readable reason code.
+                message: Human-readable description of the triggered signal.
+                points: Risk points added by the rule.
+            """
             reasons.append(RuleReason(code=code, message=message, points=points))
 
         if features.get("cookie_missing_after_seen"):

@@ -2,7 +2,6 @@ import logging
 from typing import Any
 
 import joblib
-import numpy as np
 
 from app.fraud_engine.model_registry import ModelRegistry
 from app.fraud_engine.schemas import FEATURE_COLUMNS, MLResult
@@ -11,10 +10,28 @@ logger = logging.getLogger(__name__)
 
 
 class FraudMLModel:
+    """
+    Fraud-detection component used to score, classify, or train signals.
+    """
     def __init__(self, registry: ModelRegistry | None = None) -> None:
+        """
+        Initialize the fraud ML model wrapper.
+
+        Args:
+            registry: Optional model registry used to resolve active model files.
+        """
         self.registry = registry or ModelRegistry()
 
     def predict(self, features: dict[str, Any]) -> MLResult:
+        """
+        Score a feature set with the active fraud model when available.
+
+        Args:
+            features: Fraud feature snapshot keyed by feature column name.
+
+        Returns:
+            ML result containing fraud probability, anomaly score, and model version.
+        """
         config = self.registry.active_config()
         classifier_path = self.registry.model_file(config.get("fraud_classifier"))
         isolation_path = self.registry.model_file(config.get("isolation_forest"))
@@ -23,7 +40,7 @@ class FraudMLModel:
             return MLResult()
 
         columns = config.get("feature_columns") or FEATURE_COLUMNS
-        vector = np.array([[float(features.get(column, 0) or 0) for column in columns]])
+        vector = [[float(features.get(column, 0) or 0) for column in columns]]
         fraud_probability = 0.0
         anomaly_score = 0.0
         try:

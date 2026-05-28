@@ -30,6 +30,9 @@ from app.utils.security import utc_now
 
 
 class AdminFraudService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         visitor_repository: VisitorRepository | None = None,
@@ -43,6 +46,24 @@ class AdminFraudService:
         fraud_engine_repository: FraudEngineRepository | None = None,
         anonymous_ip_usage_repository: AnonymousIPUsageRepository | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            visitor_repository: The visitor repository value used by this operation.
+            pdf_repository: The pdf repository value used by this operation.
+            fraud_event_repository: The fraud event repository value used by this operation.
+            identity_link_repository: The identity link repository value used by this operation.
+            risk_snapshot_repository: The risk snapshot repository value used by this operation.
+            ip_intelligence_repository: The ip intelligence repository value used by this operation.
+            behavior_event_repository: The behavior event repository value used by this operation.
+            user_repository: The user repository value used by this operation.
+            fraud_engine_repository: The fraud engine repository value used by this operation.
+            anonymous_ip_usage_repository: The anonymous ip usage repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.pdf_repository = pdf_repository or PDFRepository()
         self.fraud_event_repository = fraud_event_repository or FraudEventRepository()
@@ -62,6 +83,19 @@ class AdminFraudService:
         visitor_id: str | None = None,
         allowed: bool | None = None,
     ) -> FraudEventListResponse:
+        """
+        Return fraud events data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            severity: Severity filter or value used by the operation.
+            event_type: Event type filter or value used by the operation.
+            visitor_id: Unique visitor identifier used by the operation.
+            allowed: The allowed value used by this operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         events = await self.fraud_event_repository.list_events(
             limit=limit,
             severity=severity,
@@ -76,6 +110,15 @@ class AdminFraudService:
         )
 
     async def get_fraud_visitors(self, limit: int) -> AdminFraudVisitorsResponse:
+        """
+        Return fraud visitors data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            Matching record or value when available.
+        """
         visitors = await self.visitor_repository.list_for_admin_fraud(limit=limit)
         return AdminFraudVisitorsResponse(
             total=len(visitors),
@@ -84,6 +127,12 @@ class AdminFraudService:
         )
 
     async def get_fraud_summary(self) -> AdminFraudSummaryResponse:
+        """
+        Return fraud summary data for the service workflow.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return AdminFraudSummaryResponse(
             total_visitors=await self.visitor_repository.count_visitors(),
             blocked_visitors=await self.visitor_repository.count_blocked_visitors(),
@@ -134,6 +183,18 @@ class AdminFraudService:
         self,
         visitor_id: str,
     ) -> AdminVisitorInvestigationResponse:
+        """
+        Return visitor investigation data for the service workflow.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         visitor = await self.visitor_repository.get_by_id(visitor_id)
         if visitor is None:
             raise HTTPException(
@@ -216,6 +277,15 @@ class AdminFraudService:
         )
 
     async def get_all_pdfs(self, limit: int) -> AdminPDFListResponse:
+        """
+        Return all pdfs data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            Matching record or value when available.
+        """
         pdfs = await self.pdf_repository.list_all(limit=limit)
         return AdminPDFListResponse(
             total=len(pdfs),
@@ -224,6 +294,15 @@ class AdminFraudService:
         )
 
     async def get_ip_usage_list(self, limit: int) -> dict[str, Any]:
+        """
+        Return ip usage list data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            Matching record or value when available.
+        """
         items = await self.anonymous_ip_usage_repository.list_recent(limit=limit)
         return {
             "total": len(items),
@@ -232,6 +311,18 @@ class AdminFraudService:
         }
 
     async def get_ip_usage_detail(self, ip_address: str) -> dict[str, Any]:
+        """
+        Return ip usage detail data for the service workflow.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Matching record or value when available.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         items = await self.anonymous_ip_usage_repository.list_recent(limit=500)
         matched = [item for item in items if item.get("ip_address") == ip_address]
         if not matched:
@@ -247,6 +338,15 @@ class AdminFraudService:
 
 
 def _build_admin_visitor_item(visitor: dict[str, Any]) -> AdminFraudVisitorItem:
+    """
+    Build Admin Visitor Item for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+    
+    Returns:
+        Operation result represented as `AdminFraudVisitorItem`.
+    """
     usage_summary = build_usage_summary(visitor)
     return AdminFraudVisitorItem(
         visitor_id=str(visitor.get("_id", "")),
@@ -266,6 +366,15 @@ def _build_admin_visitor_item(visitor: dict[str, Any]) -> AdminFraudVisitorItem:
 
 
 def _build_admin_pdf_item(pdf: dict[str, Any]) -> AdminPDFItem:
+    """
+    Build Admin Pdf Item for the requested operation.
+    
+    Args:
+        pdf: The pdf value used by this operation.
+    
+    Returns:
+        Operation result represented as `AdminPDFItem`.
+    """
     return AdminPDFItem(
         pdf_id=str(pdf.get("_id", "")),
         visitor_id=pdf.get("visitor_id"),
@@ -282,6 +391,15 @@ def _build_admin_pdf_item(pdf: dict[str, Any]) -> AdminPDFItem:
 
 
 def _sanitize_visitor(visitor: dict[str, Any]) -> dict[str, Any]:
+    """
+    Sanitize Visitor for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {
         "visitor_id": str(visitor.get("_id", "")),
         "cookie_id": visitor.get("cookie_id"),
@@ -311,6 +429,15 @@ def _sanitize_visitor(visitor: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
+    """
+    Sanitize User for the requested operation.
+    
+    Args:
+        user: User record involved in the operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {
         "user_id": str(user.get("_id", "")),
         "email": user.get("email"),
@@ -326,6 +453,15 @@ def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sanitize_mongo_doc(item: dict[str, Any]) -> dict[str, Any]:
+    """
+    Sanitize Mongo Doc for the requested operation.
+    
+    Args:
+        item: The item value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {key: value for key, value in item.items() if key != "_id"}
 
 
@@ -334,6 +470,17 @@ def _build_timeline(
     pdfs: list[dict[str, Any]],
     fraud_events: list[dict[str, Any]],
 ) -> list[TimelineItem]:
+    """
+    Build Timeline for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+        pdfs: The pdfs value used by this operation.
+        fraud_events: The fraud events value used by this operation.
+    
+    Returns:
+        Operation result represented as `list[TimelineItem]`.
+    """
     timeline = [
         TimelineItem(
             id=str(visitor.get("_id", "")),
@@ -374,4 +521,13 @@ def _build_timeline(
 
 
 def _datetime_or_now(value: Any) -> datetime:
+    """
+    Datetime Or Now for the requested operation.
+    
+    Args:
+        value: Value processed by the helper.
+    
+    Returns:
+        Operation result represented as `datetime`.
+    """
     return value if isinstance(value, datetime) else utc_now()

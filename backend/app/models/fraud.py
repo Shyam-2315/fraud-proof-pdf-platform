@@ -6,6 +6,9 @@ BLOCKED_ENTITIES_COLLECTION = "blocked_entities"
 
 
 class FraudEventType(StrEnum):
+    """
+    Model describing the fraud event type domain object.
+    """
     VISITOR_IDENTIFIED = "VISITOR_IDENTIFIED"
     PDF_GENERATION_ALLOWED = "PDF_GENERATION_ALLOWED"
     PDF_GENERATION_BLOCKED = "PDF_GENERATION_BLOCKED"
@@ -37,6 +40,9 @@ class FraudEventType(StrEnum):
 
 
 class FraudSeverity(StrEnum):
+    """
+    Model describing the fraud severity domain object.
+    """
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
@@ -44,6 +50,9 @@ class FraudSeverity(StrEnum):
 
 
 class BlockedEntityType(StrEnum):
+    """
+    Model describing the blocked entity type domain object.
+    """
     FINGERPRINT = "FINGERPRINT"
     IP = "IP"
     COOKIE = "COOKIE"

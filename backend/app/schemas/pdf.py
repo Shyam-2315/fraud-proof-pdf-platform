@@ -4,11 +4,17 @@ from pydantic import BaseModel, Field
 
 
 class PDFGenerateRequest(BaseModel):
+    """
+    Schema describing the pdf generate request payload.
+    """
     title: str = Field(min_length=1, max_length=120)
     content: str = Field(min_length=1, max_length=20000)
 
 
 class PDFGenerateResponse(BaseModel):
+    """
+    Schema describing the pdf generate response payload.
+    """
     success: bool
     message: str
     pdf_id: str | None = None
@@ -27,6 +33,9 @@ class PDFGenerateResponse(BaseModel):
 
 
 class PDFHistoryItem(BaseModel):
+    """
+    Schema describing the pdf history item payload.
+    """
     pdf_id: str
     title: str
     file_name: str
@@ -35,12 +44,18 @@ class PDFHistoryItem(BaseModel):
 
 
 class PDFHistoryResponse(BaseModel):
+    """
+    Schema describing the pdf history response payload.
+    """
     visitor_id: str
     total: int
     items: list[PDFHistoryItem]
 
 
 class MyPDFHistoryItem(BaseModel):
+    """
+    Schema describing the my pdf history item payload.
+    """
     pdf_id: str
     title: str
     file_name: str
@@ -49,5 +64,8 @@ class MyPDFHistoryItem(BaseModel):
 
 
 class MyPDFHistoryResponse(BaseModel):
+    """
+    Schema describing the my pdf history response payload.
+    """
     total: int
     items: list[MyPDFHistoryItem]

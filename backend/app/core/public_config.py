@@ -7,10 +7,25 @@ LEGACY_COOKIE_NAME = "anon_id"
 
 
 def get_visitor_cookie(cookies: dict[str, str]) -> str | None:
+    """
+    Return the current visitor cookie value from known cookie names.
+
+    Args:
+        cookies: Request cookie mapping from the incoming client.
+
+    Returns:
+        Visitor cookie value when present, otherwise None.
+    """
     return cookies.get(CUSTOMER_COOKIE_NAME) or cookies.get(LEGACY_COOKIE_NAME)
 
 
 def customer_cookie_options() -> dict[str, object]:
+    """
+    Build secure cookie options for the customer visitor cookie.
+
+    Returns:
+        Cookie option mapping derived from current application settings.
+    """
     from app.config import get_settings
 
     settings = get_settings()

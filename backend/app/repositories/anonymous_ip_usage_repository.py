@@ -12,7 +12,16 @@ logger = logging.getLogger(__name__)
 
 
 class AnonymousIPUsageRepository:
+    """
+    Repository that encapsulates database access for the domain model.
+    """
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection used for the requested repository operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return get_database()[ANONYMOUS_IP_USAGE_COLLECTION]
 
     def _active_window_filter(
@@ -20,6 +29,16 @@ class AnonymousIPUsageRepository:
         ip_address: str,
         now: datetime,
     ) -> dict[str, Any]:
+        """
+        Active Window Filter for the requested operation.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            now: Current timestamp used for the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         return {
             "ip_address": ip_address,
             "window_start": {"$lte": now},
@@ -31,6 +50,16 @@ class AnonymousIPUsageRepository:
         ip_address: str,
         now: datetime,
     ) -> dict[str, Any] | None:
+        """
+        Fetch active window data from persistence.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            now: Current timestamp used for the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not ip_address:
             return None
         active_windows = await self.find_active_windows(ip_address=ip_address, now=now)
@@ -67,6 +96,16 @@ class AnonymousIPUsageRepository:
         ip_address: str,
         now: datetime,
     ) -> list[dict[str, Any]]:
+        """
+        Fetch active windows data from persistence.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            now: Current timestamp used for the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not ip_address:
             return []
         cursor = (
@@ -88,6 +127,22 @@ class AnonymousIPUsageRepository:
         fingerprint_hash: str | None,
         user_agent: str | None,
     ) -> dict[str, Any]:
+        """
+        Upsert Usage Window for the requested operation.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            now: Current timestamp used for the operation.
+            window_start: The window start value used by this operation.
+            window_end: The window end value used by this operation.
+            visitor_id: Unique visitor identifier used by the operation.
+            anon_id: Unique anon identifier used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            user_agent: User-Agent string supplied by the client.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         active_windows = await self.find_active_windows(ip_address=ip_address, now=now)
         active = active_windows[0] if active_windows else None
         selector = {"_id": active["_id"]} if active is not None else {
@@ -134,6 +189,16 @@ class AnonymousIPUsageRepository:
         ip_address: str,
         now: datetime,
     ) -> int:
+        """
+        Fetch usage count data from persistence.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            now: Current timestamp used for the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         active_windows = await self.find_active_windows(ip_address=ip_address, now=now)
         if not active_windows:
             return 0
@@ -143,11 +208,26 @@ class AnonymousIPUsageRepository:
         self,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        """
+        List recent records that match the requested filters.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = self.get_collection().find({}).sort("updated_at", -1).limit(limit)
         return await cursor.to_list(length=limit)
 
 
 async def ensure_anonymous_ip_usage_indexes() -> None:
+    """
+    Ensure the required database indexes exist for this repository.
+    
+    Returns:
+        None.
+    """
     collection = AnonymousIPUsageRepository().get_collection()
     await collection.create_index(
         [("ip_address", ASCENDING)],

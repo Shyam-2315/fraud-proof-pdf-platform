@@ -12,7 +12,15 @@ logger = logging.getLogger(__name__)
 
 
 class IdentityLinkRepository:
+    """Persist and query visitor identity-link records."""
+
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection storing identity links.
+
+        Returns:
+            Motor collection for identity-link documents.
+        """
         return get_database()[VISITOR_IDENTITY_LINKS_COLLECTION]
 
     async def create_link(
@@ -24,6 +32,20 @@ class IdentityLinkRepository:
         reason: str,
         matched_signals: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Create an identity link between two visitors when one does not already exist.
+
+        Args:
+            source_visitor_id: Visitor that initiated the relationship.
+            target_visitor_id: Visitor matched to the source visitor.
+            link_type: Link type describing the relationship strength.
+            confidence: Confidence score for the relationship.
+            reason: Human-readable explanation of the match.
+            matched_signals: Optional signal payload supporting the link.
+
+        Returns:
+            Existing or newly inserted identity-link document.
+        """
         existing = await self.get_collection().find_one(
             {
                 "source_visitor_id": source_visitor_id,
@@ -54,6 +76,16 @@ class IdentityLinkRepository:
         visitor_id: str,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        """
+        Return identity links where the visitor appears as source or target.
+
+        Args:
+            visitor_id: Visitor whose links should be listed.
+            limit: Maximum number of links to return.
+
+        Returns:
+            Recent identity-link documents associated with the visitor.
+        """
         cursor = (
             self.get_collection()
             .find(
@@ -70,13 +102,29 @@ class IdentityLinkRepository:
         return await cursor.to_list(length=limit)
 
     async def count_duplicate_links(self) -> int:
+        """
+        Count high-confidence identity links used as duplicate signals.
+
+        Returns:
+            Number of identity links with confidence greater than or equal to 80.
+        """
         return await self.get_collection().count_documents({"confidence": {"$gte": 80}})
 
     async def count_links(self, filter_query: dict[str, Any] | None = None) -> int:
+        """
+        Count identity links matching an optional filter.
+
+        Args:
+            filter_query: Optional MongoDB filter query.
+
+        Returns:
+            Number of matching identity-link documents.
+        """
         return await self.get_collection().count_documents(filter_query or {})
 
 
 async def ensure_identity_link_indexes() -> None:
+    """Create MongoDB indexes required for identity-link queries."""
     collection = IdentityLinkRepository().get_collection()
     await collection.create_index(
         [("source_visitor_id", ASCENDING)],

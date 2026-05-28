@@ -28,6 +28,9 @@ from app.utils.security import (
 
 
 class VisitorService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         repository: VisitorRepository | None = None,
@@ -38,6 +41,21 @@ class VisitorService:
         risk_scoring_service: RiskScoringService | None = None,
         fraud_engine_decision_service: FraudEngineDecisionService | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+            fraud_service: The fraud service value used by this operation.
+            fraud_event_service: The fraud event service value used by this operation.
+            identity_link_repository: The identity link repository value used by this operation.
+            identity_graph_service: The identity graph service value used by this operation.
+            risk_scoring_service: The risk scoring service value used by this operation.
+            fraud_engine_decision_service: The fraud engine decision service value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.repository = repository or VisitorRepository()
         self.fraud_service = fraud_service or FraudService()
         self.fraud_event_service = fraud_event_service or FraudEventService()
@@ -58,6 +76,16 @@ class VisitorService:
         request: Request,
         payload: VisitorIdentifyRequest,
     ) -> tuple[dict[str, Any], bool, str]:
+        """
+        Identify Visitor for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            payload: Validated request payload for this operation.
+        
+        Returns:
+            Operation result represented as `tuple[dict[str, Any], bool, str]`.
+        """
         request_cookie_id = get_visitor_cookie(request.cookies)
         generated_cookie_id = request_cookie_id or generate_uuid()
         current_ip = normalize_ip(client_ip(request))
@@ -406,6 +434,15 @@ class VisitorService:
         return final_visitor, False, cookie_id
 
     async def find_visitor_from_request(self, request: Request) -> dict[str, Any] | None:
+        """
+        Find visitor from request for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Matching record or value when available.
+        """
         visitor, _ = await self.visitor_resolution_service.resolve(request)
         return visitor
 
@@ -419,6 +456,21 @@ class VisitorService:
         reason: str,
         matched_signals: dict[str, Any],
     ) -> None:
+        """
+        Create Identity Link for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            source_visitor_id: Unique source visitor identifier used by the operation.
+            target_visitor_id: Unique target visitor identifier used by the operation.
+            link_type: The link type value used by this operation.
+            confidence: The confidence value used by this operation.
+            reason: The reason value used by this operation.
+            matched_signals: The matched signals value used by this operation.
+        
+        Returns:
+            None.
+        """
         link = await self.identity_link_repository.create_link(
             source_visitor_id=source_visitor_id,
             target_visitor_id=target_visitor_id,
@@ -453,6 +505,15 @@ class VisitorService:
 
 
 def build_usage_summary(visitor: dict[str, Any]) -> dict[str, int]:
+    """
+    Build usage summary data for the service workflow.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+    
+    Returns:
+        Constructed result for the requested operation.
+    """
     settings = get_settings()
     free_usage_count = int(visitor.get("free_usage_count", 0))
     return {
@@ -473,6 +534,23 @@ def _build_signals(
     ip_address: str | None = None,
     user_agent: str | None = None,
 ) -> dict[str, str | None]:
+    """
+    Build Signals for the requested operation.
+    
+    Args:
+        cookie_id: Unique cookie identifier used by the operation.
+        local_storage_id: Unique local storage identifier used by the operation.
+        session_id: Unique session identifier used by the operation.
+        fingerprint_hash: Device fingerprint hash associated with the caller.
+        device_profile_hash: Hash value representing device profile.
+        canvas_hash: Hash value representing canvas.
+        webgl_hash: Hash value representing webgl.
+        ip_address: IP address being analyzed or persisted.
+        user_agent: User-Agent string supplied by the client.
+    
+    Returns:
+        Operation result represented as `dict[str, str | None]`.
+    """
     return {
         "cookie_id": cookie_id,
         "local_storage_id": local_storage_id,
@@ -487,6 +565,15 @@ def _build_signals(
 
 
 def _automation_dict(payload: VisitorIdentifyRequest) -> dict[str, Any]:
+    """
+    Automation Dict for the requested operation.
+    
+    Args:
+        payload: Validated request payload for this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     signals = payload.automation_signals
     if signals is None:
         return {}

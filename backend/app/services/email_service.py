@@ -15,13 +15,34 @@ BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
 class EmailService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(self) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
 
     def is_configured(self) -> bool:
+        """
+        Is Configured for the requested operation.
+        
+        Returns:
+            `True` when the condition is satisfied, otherwise `False`.
+        """
         return not self.missing_config_fields()
 
     def missing_config_fields(self) -> list[str]:
+        """
+        Missing Config Fields for the requested operation.
+        
+        Returns:
+            Operation result represented as `list[str]`.
+        """
         if self.settings.EMAIL_PROVIDER == "BREVO_API":
             missing: list[str] = []
             if not self.settings.BREVO_API_KEY:
@@ -47,6 +68,19 @@ class EmailService:
         return ["EMAIL_PROVIDER"]
 
     async def send_verification_code(self, *, email: str, code: str) -> None:
+        """
+        Send verification code for the requested operation.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+            code: Verification or authorization code supplied by the caller.
+        
+        Returns:
+            None.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         if not self.is_configured():
             missing_fields = self.missing_config_fields()
             if self.settings.APP_ENV.lower() == "production":
@@ -66,6 +100,18 @@ class EmailService:
         await self._deliver_message(message, secret_values=[code])
 
     async def send_test_email(self, *, to_email: str) -> None:
+        """
+        Send test email for the requested operation.
+        
+        Args:
+            to_email: The to email value used by this operation.
+        
+        Returns:
+            None.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         if not self.is_configured():
             missing_fields = self.missing_config_fields()
             logger.error(
@@ -94,6 +140,15 @@ class EmailService:
         await self._deliver_message(message)
 
     def _send_smtp_message(self, message: EmailMessage) -> None:
+        """
+        Send Smtp Message for the requested operation.
+        
+        Args:
+            message: The message value used by this operation.
+        
+        Returns:
+            None.
+        """
         with self._create_smtp_client() as server:
             if self._should_starttls():
                 server.ehlo()
@@ -103,6 +158,18 @@ class EmailService:
             server.send_message(message)
 
     async def _send_brevo_api_message(self, message: EmailMessage) -> None:
+        """
+        Send Brevo Api Message for the requested operation.
+        
+        Args:
+            message: The message value used by this operation.
+        
+        Returns:
+            None.
+        
+        Raises:
+            RuntimeError: If required runtime dependencies cannot complete the operation.
+        """
         payload = {
             "sender": {
                 "name": self.settings.BREVO_FROM_NAME or self.settings.APP_NAME,
@@ -127,11 +194,31 @@ class EmailService:
             raise RuntimeError(f"Brevo API returned status={response.status_code}")
 
     def _create_smtp_client(self) -> Any:
+        """
+        Create Smtp Client for the requested operation.
+        
+        Returns:
+            Operation result represented as `Any`.
+        """
         if self._uses_implicit_ssl():
             return smtplib.SMTP_SSL(self.settings.SMTP_HOST, self.settings.SMTP_PORT, timeout=10)
         return smtplib.SMTP(self.settings.SMTP_HOST, self.settings.SMTP_PORT, timeout=10)
 
     async def _deliver_message(self, message: EmailMessage, secret_values: list[str] | None = None) -> None:
+        """
+        Deliver Message for the requested operation.
+        
+        Args:
+            message: The message value used by this operation.
+            secret_values: The secret values value used by this operation.
+        
+        Returns:
+            None.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+            RuntimeError: If required runtime dependencies cannot complete the operation.
+        """
         try:
             if self.settings.EMAIL_PROVIDER == "BREVO_API":
                 await self._send_brevo_api_message(message)
@@ -152,6 +239,12 @@ class EmailService:
             ) from exc
 
     def get_status(self) -> dict[str, Any]:
+        """
+        Return status data for the service workflow.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if self.settings.EMAIL_PROVIDER == "BREVO_API":
             return {
                 "provider": self.settings.EMAIL_PROVIDER,
@@ -184,6 +277,16 @@ class EmailService:
         }
 
     def _build_verification_message(self, *, email: str, code: str) -> EmailMessage:
+        """
+        Build Verification Message for the requested operation.
+        
+        Args:
+            email: Email address used for lookup, verification, or delivery.
+            code: Verification or authorization code supplied by the caller.
+        
+        Returns:
+            Operation result represented as `EmailMessage`.
+        """
         message = EmailMessage()
         message["Subject"] = f"{self.settings.APP_NAME} verification code"
         message["From"] = self._from_header()
@@ -201,6 +304,16 @@ class EmailService:
         return message
 
     def _safe_exception_message(self, exc: Exception, secret_values: list[str]) -> str:
+        """
+        Safe Exception Message for the requested operation.
+        
+        Args:
+            exc: The exc value used by this operation.
+            secret_values: The secret values value used by this operation.
+        
+        Returns:
+            Operation result represented as `str`.
+        """
         message = str(exc) or exc.__class__.__name__
         for secret in [
             self.settings.SMTP_PASSWORD,
@@ -212,6 +325,12 @@ class EmailService:
         return message
 
     def _smtp_mode(self) -> str:
+        """
+        Smtp Mode for the requested operation.
+        
+        Returns:
+            Operation result represented as `str`.
+        """
         if self._uses_implicit_ssl():
             return "SSL"
         if self._should_starttls():
@@ -219,6 +338,12 @@ class EmailService:
         return "PLAIN"
 
     def _delivery_mode(self) -> str:
+        """
+        Delivery Mode for the requested operation.
+        
+        Returns:
+            Operation result represented as `str`.
+        """
         if self.settings.EMAIL_PROVIDER == "BREVO_API":
             return "HTTPS_API"
         if self.settings.EMAIL_PROVIDER == "SMTP":
@@ -226,6 +351,12 @@ class EmailService:
         return "UNKNOWN"
 
     def _from_header(self) -> str:
+        """
+        From Header for the requested operation.
+        
+        Returns:
+            Operation result represented as `str`.
+        """
         if self.settings.EMAIL_PROVIDER == "BREVO_API":
             from_name = self.settings.BREVO_FROM_NAME.strip()
             from_email = self.settings.BREVO_FROM_EMAIL.strip()
@@ -237,9 +368,21 @@ class EmailService:
         return from_email
 
     def _uses_implicit_ssl(self) -> bool:
+        """
+        Uses Implicit Ssl for the requested operation.
+        
+        Returns:
+            Operation result represented as `bool`.
+        """
         return self.settings.SMTP_PORT == 465
 
     def _should_starttls(self) -> bool:
+        """
+        Should Starttls for the requested operation.
+        
+        Returns:
+            Operation result represented as `bool`.
+        """
         if self._uses_implicit_ssl():
             return False
         if self.settings.SMTP_PORT == 587:

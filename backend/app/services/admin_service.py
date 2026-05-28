@@ -27,11 +27,29 @@ from app.utils.security import utc_now
 
 
 class AdminService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(self, repository: AdminRepository | None = None) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.repository = repository or AdminRepository()
         self.settings = get_settings()
 
     async def get_dashboard(self) -> AdminDashboardResponse:
+        """
+        Return dashboard data for the service workflow.
+        
+        Returns:
+            Matching record or value when available.
+        """
         (
             total_visitors,
             total_users,
@@ -100,6 +118,18 @@ class AdminService:
         risk_level: str | None,
         is_blocked: bool | None,
     ) -> AdminListResponse:
+        """
+        Return visitors data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            offset: Number of records to skip before returning results.
+            risk_level: Risk level filter or value used by the operation.
+            is_blocked: Boolean flag indicating whether blocked should be applied.
+        
+        Returns:
+            Matching record or value when available.
+        """
         filter_query = _remove_none(
             {"risk_level": risk_level, "is_blocked": is_blocked}
         )
@@ -126,6 +156,18 @@ class AdminService:
         self,
         visitor_id: str,
     ) -> AdminVisitorDetailResponse:
+        """
+        Return visitor detail data for the service workflow.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         visitor = await self.repository.get_document_by_id(
             VISITOR_COLLECTION,
             visitor_id,
@@ -181,6 +223,16 @@ class AdminService:
         )
 
     async def get_users(self, limit: int, offset: int) -> AdminListResponse:
+        """
+        Return users data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            offset: Number of records to skip before returning results.
+        
+        Returns:
+            Matching record or value when available.
+        """
         total, users = await asyncio.gather(
             self.repository.count_documents(USER_COLLECTION),
             self.repository.list_users(limit=limit, offset=offset),
@@ -198,6 +250,17 @@ class AdminService:
         offset: int,
         generation_type: str | None,
     ) -> AdminListResponse:
+        """
+        Return pdfs data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            offset: Number of records to skip before returning results.
+            generation_type: PDF generation type filter used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         filter_query = _remove_none({"generation_type": generation_type})
         total, pdfs = await asyncio.gather(
             self.repository.count_documents(GENERATED_PDF_COLLECTION, filter_query),
@@ -221,6 +284,18 @@ class AdminService:
         severity: str | None,
         event_type: str | None,
     ) -> AdminListResponse:
+        """
+        Return fraud events data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            offset: Number of records to skip before returning results.
+            severity: Severity filter or value used by the operation.
+            event_type: Event type filter or value used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         filter_query = _remove_none({"severity": severity, "event_type": event_type})
         total, events = await asyncio.gather(
             self.repository.count_documents(FRAUD_EVENTS_COLLECTION, filter_query),
@@ -245,6 +320,18 @@ class AdminService:
         entity_type: str | None,
         is_active: bool | None,
     ) -> AdminListResponse:
+        """
+        Return blocked entities data for the service workflow.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            offset: Number of records to skip before returning results.
+            entity_type: Blocked-entity type used by the operation.
+            is_active: Whether to restrict the operation to active records.
+        
+        Returns:
+            Matching record or value when available.
+        """
         filter_query = _remove_none(
             {"entity_type": entity_type, "is_active": is_active}
         )
@@ -268,6 +355,12 @@ class AdminService:
         )
 
     async def get_system_health(self) -> AdminSystemHealthResponse:
+        """
+        Return system health data for the service workflow.
+        
+        Returns:
+            Matching record or value when available.
+        """
         database_status, redis_status = await asyncio.gather(
             _ping_database(),
             _ping_cache(),
@@ -303,6 +396,15 @@ class AdminService:
         )
 
     async def _build_user_list_item(self, user: dict[str, Any]) -> dict[str, Any]:
+        """
+        Build User List Item for the requested operation.
+        
+        Args:
+            user: User record involved in the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         user_id = str(user.get("_id", ""))
         pdf_count = await self.repository.count_documents(
             GENERATED_PDF_COLLECTION,
@@ -321,6 +423,15 @@ class AdminService:
         ).model_dump()
 
     async def _safe_count_collection(self, collection_name: str) -> int:
+        """
+        Safe Count Collection for the requested operation.
+        
+        Args:
+            collection_name: Name of the MongoDB collection to query.
+        
+        Returns:
+            Operation result represented as `int`.
+        """
         try:
             return await self.repository.count_documents(collection_name)
         except Exception:
@@ -328,6 +439,15 @@ class AdminService:
 
 
 def _build_visitor_list_item(visitor: dict[str, Any]) -> AdminVisitorListItem:
+    """
+    Build Visitor List Item for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+    
+    Returns:
+        Operation result represented as `AdminVisitorListItem`.
+    """
     usage_summary = build_usage_summary(visitor)
     return AdminVisitorListItem(
         visitor_id=str(visitor.get("_id", "")),
@@ -346,6 +466,15 @@ def _build_visitor_list_item(visitor: dict[str, Any]) -> AdminVisitorListItem:
 
 
 def _build_pdf_list_item(pdf: dict[str, Any]) -> AdminPDFListItem:
+    """
+    Build Pdf List Item for the requested operation.
+    
+    Args:
+        pdf: The pdf value used by this operation.
+    
+    Returns:
+        Operation result represented as `AdminPDFListItem`.
+    """
     return AdminPDFListItem(
         pdf_id=str(pdf.get("_id", "")),
         visitor_id=pdf.get("visitor_id"),
@@ -361,6 +490,15 @@ def _build_pdf_list_item(pdf: dict[str, Any]) -> AdminPDFListItem:
 
 
 def _build_fraud_event_item(event: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build Fraud Event Item for the requested operation.
+    
+    Args:
+        event: The event value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {
         "event_id": str(event.get("_id", "")),
         "visitor_id": event.get("visitor_id"),
@@ -374,6 +512,15 @@ def _build_fraud_event_item(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def _build_blocked_entity_item(entity: dict[str, Any]) -> AdminBlockedEntityItem:
+    """
+    Build Blocked Entity Item for the requested operation.
+    
+    Args:
+        entity: The entity value used by this operation.
+    
+    Returns:
+        Operation result represented as `AdminBlockedEntityItem`.
+    """
     return AdminBlockedEntityItem(
         entity_id=str(entity.get("_id", "")),
         entity_type=str(entity.get("entity_type", "")),
@@ -387,6 +534,12 @@ def _build_blocked_entity_item(entity: dict[str, Any]) -> AdminBlockedEntityItem
 
 
 async def _ping_database() -> str:
+    """
+    Ping Database for the requested operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     try:
         await ping_mongo()
     except Exception as exc:
@@ -395,6 +548,12 @@ async def _ping_database() -> str:
 
 
 async def _ping_cache() -> str:
+    """
+    Ping Cache for the requested operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     try:
         await ping_redis()
     except Exception as exc:
@@ -403,14 +562,41 @@ async def _ping_cache() -> str:
 
 
 def _datetime_or_now(value: Any) -> datetime:
+    """
+    Datetime Or Now for the requested operation.
+    
+    Args:
+        value: Value processed by the helper.
+    
+    Returns:
+        Operation result represented as `datetime`.
+    """
     return value if isinstance(value, datetime) else utc_now()
 
 
 def _string_list(values: Any) -> list[str]:
+    """
+    String List for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `list[str]`.
+    """
     if not isinstance(values, list):
         return []
     return [str(value) for value in values]
 
 
 def _remove_none(values: dict[str, Any]) -> dict[str, Any]:
+    """
+    Remove None for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {key: value for key, value in values.items() if value is not None}

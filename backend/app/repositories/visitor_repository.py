@@ -12,10 +12,28 @@ logger = logging.getLogger(__name__)
 
 
 class VisitorRepository:
+    """
+    Repository that encapsulates database access for the domain model.
+    """
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection used for the requested repository operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return get_database()[VISITOR_COLLECTION]
 
     async def find_by_cookie_id(self, cookie_id: str | None) -> dict[str, Any] | None:
+        """
+        Fetch by cookie id data from persistence.
+        
+        Args:
+            cookie_id: Unique cookie identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not cookie_id:
             return None
         return await self.get_collection().find_one(
@@ -25,6 +43,15 @@ class VisitorRepository:
     async def find_by_local_storage_id(
         self, local_storage_id: str | None
     ) -> dict[str, Any] | None:
+        """
+        Fetch by local storage id data from persistence.
+        
+        Args:
+            local_storage_id: Unique local storage identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not local_storage_id:
             return None
         return await self.get_collection().find_one(
@@ -32,6 +59,15 @@ class VisitorRepository:
         )
 
     async def find_by_session_id(self, session_id: str | None) -> dict[str, Any] | None:
+        """
+        Fetch by session id data from persistence.
+        
+        Args:
+            session_id: Unique session identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not session_id:
             return None
         return await self.get_collection().find_one({"session_ids": session_id})
@@ -39,6 +75,15 @@ class VisitorRepository:
     async def find_by_fingerprint_hash(
         self, fingerprint_hash: str | None
     ) -> dict[str, Any] | None:
+        """
+        Fetch by fingerprint hash data from persistence.
+        
+        Args:
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not fingerprint_hash:
             return None
         return await self.get_collection().find_one(
@@ -48,6 +93,15 @@ class VisitorRepository:
     async def find_by_device_profile_hash(
         self, device_profile_hash: str | None
     ) -> dict[str, Any] | None:
+        """
+        Fetch by device profile hash data from persistence.
+        
+        Args:
+            device_profile_hash: Hash value representing device profile.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not device_profile_hash:
             return None
         return await self.get_collection().find_one(
@@ -55,11 +109,29 @@ class VisitorRepository:
         )
 
     async def find_by_canvas_hash(self, canvas_hash: str | None) -> dict[str, Any] | None:
+        """
+        Fetch by canvas hash data from persistence.
+        
+        Args:
+            canvas_hash: Hash value representing canvas.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not canvas_hash:
             return None
         return await self.get_collection().find_one({"canvas_hashes": canvas_hash})
 
     async def find_by_webgl_hash(self, webgl_hash: str | None) -> dict[str, Any] | None:
+        """
+        Fetch by webgl hash data from persistence.
+        
+        Args:
+            webgl_hash: Hash value representing webgl.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not webgl_hash:
             return None
         return await self.get_collection().find_one({"webgl_hashes": webgl_hash})
@@ -69,6 +141,16 @@ class VisitorRepository:
         ip_address: str | None,
         user_agent: str | None,
     ) -> dict[str, Any] | None:
+        """
+        Fetch by ip and user agent data from persistence.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            user_agent: User-Agent string supplied by the client.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not ip_address or not user_agent:
             return None
         return await self.get_collection().find_one(
@@ -85,6 +167,21 @@ class VisitorRepository:
         canvas_hash: str | None = None,
         webgl_hash: str | None = None,
     ) -> dict[str, Any] | None:
+        """
+        Fetch best match data from persistence.
+        
+        Args:
+            cookie_id: Unique cookie identifier used by the operation.
+            local_storage_id: Unique local storage identifier used by the operation.
+            session_id: Unique session identifier used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            device_profile_hash: Hash value representing device profile.
+            canvas_hash: Hash value representing canvas.
+            webgl_hash: Hash value representing webgl.
+        
+        Returns:
+            Matching record or value when available.
+        """
         match = await self.find_by_cookie_id(cookie_id)
         if match is not None:
             return match
@@ -105,12 +202,32 @@ class VisitorRepository:
         ip_address: str | None,
         user_agent: str | None,
     ) -> dict[str, Any] | None:
+        """
+        Fetch weak identity match data from persistence.
+        
+        Args:
+            device_profile_hash: Hash value representing device profile.
+            ip_address: IP address being analyzed or persisted.
+            user_agent: User-Agent string supplied by the client.
+        
+        Returns:
+            Matching record or value when available.
+        """
         match = await self.find_by_device_profile_hash(device_profile_hash)
         if match is not None:
             return match
         return await self.find_by_ip_and_user_agent(ip_address, user_agent)
 
     async def create_visitor(self, visitor_data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist visitor data.
+        
+        Args:
+            visitor_data: The visitor data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.get_collection().insert_one(visitor_data)
         return visitor_data
 
@@ -119,6 +236,16 @@ class VisitorRepository:
         visitor_id: str,
         update_data: dict[str, Any],
     ) -> dict[str, Any] | None:
+        """
+        Update persisted visitor data.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            update_data: The update data value used by this operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         if update_data:
             await self.get_collection().update_one(
                 {"_id": visitor_id},
@@ -127,11 +254,29 @@ class VisitorRepository:
         return await self.get_by_id(visitor_id)
 
     async def get_by_id(self, visitor_id: str) -> dict[str, Any] | None:
+        """
+        Fetch by id data from persistence.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         if not visitor_id:
             return None
         return await self.get_collection().find_one({"_id": visitor_id})
 
     async def list_by_ids(self, visitor_ids: list[str]) -> list[dict[str, Any]]:
+        """
+        List by ids records that match the requested filters.
+        
+        Args:
+            visitor_ids: Collection of visitor identifiers processed by the operation.
+        
+        Returns:
+            List of matching records.
+        """
         visitor_ids = [visitor_id for visitor_id in visitor_ids if visitor_id]
         if not visitor_ids:
             return []
@@ -139,6 +284,15 @@ class VisitorRepository:
         return await cursor.to_list(length=len(visitor_ids))
 
     async def increment_free_usage(self, visitor_id: str) -> dict[str, Any] | None:
+        """
+        Increment Free Usage for the requested operation.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any] | None`.
+        """
         return await self.get_collection().find_one_and_update(
             {"_id": visitor_id},
             {
@@ -153,6 +307,16 @@ class VisitorRepository:
         visitor_id: str,
         reason: str,
     ) -> dict[str, Any] | None:
+        """
+        Mark persisted visitor blocked data with the requested state.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            reason: The reason value used by this operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         return await self.get_collection().find_one_and_update(
             {"_id": visitor_id},
             {
@@ -166,23 +330,68 @@ class VisitorRepository:
         )
 
     async def count_visitors(self) -> int:
+        """
+        Count visitors records that match the requested filters.
+        
+        Returns:
+            Total number of matching records.
+        """
         return await self.get_collection().count_documents({})
 
     async def count_documents(self, filter_query: dict[str, Any] | None = None) -> int:
+        """
+        Count documents records that match the requested filters.
+        
+        Args:
+            filter_query: MongoDB filter document applied to the query.
+        
+        Returns:
+            Total number of matching records.
+        """
         return await self.get_collection().count_documents(filter_query or {})
 
     async def count_blocked_visitors(self) -> int:
+        """
+        Count blocked visitors records that match the requested filters.
+        
+        Returns:
+            Total number of matching records.
+        """
         return await self.get_collection().count_documents({"is_blocked": True})
 
     async def count_high_risk_visitors(self) -> int:
+        """
+        Count high risk visitors records that match the requested filters.
+        
+        Returns:
+            Total number of matching records.
+        """
         return await self.get_collection().count_documents({"risk_score": {"$gte": 60}})
 
     async def count_by_ip(self, ip_address: str | None) -> int:
+        """
+        Count by ip records that match the requested filters.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Total number of matching records.
+        """
         if not ip_address:
             return 0
         return await self.get_collection().count_documents({"ip_addresses": ip_address})
 
     async def list_for_admin_fraud(self, limit: int = 50) -> list[dict[str, Any]]:
+        """
+        List for admin fraud records that match the requested filters.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = (
             self.get_collection()
             .find({})
@@ -193,6 +402,12 @@ class VisitorRepository:
 
 
 async def ensure_visitor_indexes() -> None:
+    """
+    Ensure the required database indexes exist for this repository.
+    
+    Returns:
+        None.
+    """
     collection = VisitorRepository().get_collection()
     await collection.create_index(
         [("cookie_id", ASCENDING)],

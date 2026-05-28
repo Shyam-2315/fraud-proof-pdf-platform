@@ -16,10 +16,31 @@ FRAUD_DECISIONS_COLLECTION = "fraud_decisions"
 
 
 class FraudEngineRepository:
+    """
+    Repository that encapsulates database access for the domain model.
+    """
     def collection(self, name: str) -> AsyncIOMotorCollection:
+        """
+        Collection for the requested operation.
+        
+        Args:
+            name: The name value used by this operation.
+        
+        Returns:
+            Operation result represented as `AsyncIOMotorCollection`.
+        """
         return get_database()[name]
 
     async def create_feature_snapshot(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist feature snapshot data.
+        
+        Args:
+            data: The data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.collection(FRAUD_FEATURE_SNAPSHOTS_COLLECTION).insert_one(data)
         return data
 
@@ -28,6 +49,16 @@ class FraudEngineRepository:
         visitor_id: str,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
+        """
+        List feature snapshots by visitor records that match the requested filters.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = (
             self.collection(FRAUD_FEATURE_SNAPSHOTS_COLLECTION)
             .find({"visitor_id": visitor_id})
@@ -37,10 +68,28 @@ class FraudEngineRepository:
         return await cursor.to_list(length=limit)
 
     async def create_training_event(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist training event data.
+        
+        Args:
+            data: The data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.collection(FRAUD_TRAINING_EVENTS_COLLECTION).insert_one(data)
         return data
 
     async def count_training_events(self, filter_query: dict[str, Any] | None = None) -> int:
+        """
+        Count training events records that match the requested filters.
+        
+        Args:
+            filter_query: MongoDB filter document applied to the query.
+        
+        Returns:
+            Total number of matching records.
+        """
         return await self.collection(FRAUD_TRAINING_EVENTS_COLLECTION).count_documents(
             filter_query or {}
         )
@@ -50,6 +99,16 @@ class FraudEngineRepository:
         filter_query: dict[str, Any] | None = None,
         limit: int = 100000,
     ) -> list[dict[str, Any]]:
+        """
+        List training events records that match the requested filters.
+        
+        Args:
+            filter_query: MongoDB filter document applied to the query.
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = (
             self.collection(FRAUD_TRAINING_EVENTS_COLLECTION)
             .find(filter_query or {})
@@ -65,6 +124,18 @@ class FraudEngineRepository:
         source: str,
         confidence: float,
     ) -> int:
+        """
+        Update persisted training labels for visitor data.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            label: The label value used by this operation.
+            source: The source value used by this operation.
+            confidence: The confidence value used by this operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         result = await self.collection(FRAUD_TRAINING_EVENTS_COLLECTION).update_many(
             {"visitor_id": visitor_id},
             {
@@ -78,16 +149,43 @@ class FraudEngineRepository:
         return int(result.modified_count)
 
     async def create_label(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist label data.
+        
+        Args:
+            data: The data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.collection(FRAUD_LABELS_COLLECTION).insert_one(data)
         return data
 
     async def latest_label_for_visitor(self, visitor_id: str) -> dict[str, Any] | None:
+        """
+        Latest Label For Visitor for the requested operation.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any] | None`.
+        """
         return await self.collection(FRAUD_LABELS_COLLECTION).find_one(
             {"visitor_id": visitor_id},
             sort=[("created_at", DESCENDING)],
         )
 
     async def list_labels(self, limit: int = 100000) -> list[dict[str, Any]]:
+        """
+        List labels records that match the requested filters.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = (
             self.collection(FRAUD_LABELS_COLLECTION)
             .find({})
@@ -97,10 +195,28 @@ class FraudEngineRepository:
         return await cursor.to_list(length=limit)
 
     async def create_model_version(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist model version data.
+        
+        Args:
+            data: The data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.collection(ML_MODEL_VERSIONS_COLLECTION).insert_one(data)
         return data
 
     async def list_model_versions(self, limit: int = 100) -> list[dict[str, Any]]:
+        """
+        List model versions records that match the requested filters.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = (
             self.collection(ML_MODEL_VERSIONS_COLLECTION)
             .find({})
@@ -110,6 +226,15 @@ class FraudEngineRepository:
         return await cursor.to_list(length=limit)
 
     async def get_model_version(self, model_version_id: str) -> dict[str, Any] | None:
+        """
+        Fetch model version data from persistence.
+        
+        Args:
+            model_version_id: Unique model version identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return await self.collection(ML_MODEL_VERSIONS_COLLECTION).find_one(
             {"_id": model_version_id}
         )
@@ -119,6 +244,16 @@ class FraudEngineRepository:
         model_version_id: str,
         status: str,
     ) -> dict[str, Any] | None:
+        """
+        Update persisted model status data.
+        
+        Args:
+            model_version_id: Unique model version identifier used by the operation.
+            status: The status value used by this operation.
+        
+        Returns:
+            Updated result of the operation.
+        """
         return await self.collection(ML_MODEL_VERSIONS_COLLECTION).find_one_and_update(
             {"_id": model_version_id},
             {"$set": {"status": status}},
@@ -126,6 +261,12 @@ class FraudEngineRepository:
         )
 
     async def archive_active_models(self) -> int:
+        """
+        Archive Active Models for the requested operation.
+        
+        Returns:
+            Operation result represented as `int`.
+        """
         result = await self.collection(ML_MODEL_VERSIONS_COLLECTION).update_many(
             {"status": "ACTIVE"},
             {"$set": {"status": "ARCHIVED"}},
@@ -133,6 +274,15 @@ class FraudEngineRepository:
         return int(result.modified_count)
 
     async def create_decision(self, data: dict[str, Any]) -> dict[str, Any]:
+        """
+        Create and persist decision data.
+        
+        Args:
+            data: The data value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         await self.collection(FRAUD_DECISIONS_COLLECTION).insert_one(data)
         return data
 
@@ -141,6 +291,16 @@ class FraudEngineRepository:
         visitor_id: str,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        """
+        List decisions by visitor records that match the requested filters.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            limit: Maximum number of records or results to return.
+        
+        Returns:
+            List of matching records.
+        """
         cursor = (
             self.collection(FRAUD_DECISIONS_COLLECTION)
             .find({"visitor_id": visitor_id})
@@ -155,6 +315,17 @@ class FraudEngineRepository:
         visitor_id: str | None = None,
         action_type: str | None = None,
     ) -> list[dict[str, Any]]:
+        """
+        List decisions records that match the requested filters.
+        
+        Args:
+            limit: Maximum number of records or results to return.
+            visitor_id: Unique visitor identifier used by the operation.
+            action_type: The action type value used by this operation.
+        
+        Returns:
+            List of matching records.
+        """
         query: dict[str, Any] = {}
         if visitor_id:
             query["visitor_id"] = visitor_id
@@ -169,12 +340,27 @@ class FraudEngineRepository:
         return await cursor.to_list(length=limit)
 
     async def count_decisions(self, filter_query: dict[str, Any] | None = None) -> int:
+        """
+        Count decisions records that match the requested filters.
+        
+        Args:
+            filter_query: MongoDB filter document applied to the query.
+        
+        Returns:
+            Total number of matching records.
+        """
         return await self.collection(FRAUD_DECISIONS_COLLECTION).count_documents(
             filter_query or {}
         )
 
 
 async def ensure_fraud_engine_indexes() -> None:
+    """
+    Ensure the required database indexes exist for this repository.
+    
+    Returns:
+        None.
+    """
     repository = FraudEngineRepository()
 
     feature_snapshots = repository.collection(FRAUD_FEATURE_SNAPSHOTS_COLLECTION)

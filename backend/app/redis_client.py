@@ -11,6 +11,12 @@ _redis: Redis | None = None
 
 
 async def connect_to_redis() -> None:
+    """
+    Open the Redis client if the configured endpoint is reachable.
+
+    Returns:
+        None. The shared Redis client is cached globally when available.
+    """
     global _redis
 
     settings = get_settings()
@@ -33,6 +39,12 @@ async def connect_to_redis() -> None:
 
 
 async def close_redis_connection() -> None:
+    """
+    Close the shared Redis connection if it is open.
+
+    Returns:
+        None. Cached Redis state is cleared.
+    """
     global _redis
 
     if _redis is not None:
@@ -43,12 +55,30 @@ async def close_redis_connection() -> None:
 
 
 def get_redis() -> Redis:
+    """
+    Return the active Redis client.
+
+    Returns:
+        Connected Redis client instance.
+
+    Raises:
+        RuntimeError: If Redis has not been connected yet.
+    """
     if _redis is None:
         raise RuntimeError("Redis is not connected")
     return _redis
 
 
 async def ping_redis() -> bool:
+    """
+    Run a ping command against the shared Redis client.
+
+    Returns:
+        True when Redis responds successfully.
+
+    Raises:
+        RuntimeError: If the Redis client has not been initialized.
+    """
     if _redis is None:
         raise RuntimeError("Redis client is not initialized")
 

@@ -45,6 +45,18 @@ def generate_dataset(
     gray_count: int = 2000,
     seed: int = 2525,
 ) -> list[dict[str, Any]]:
+    """
+    Generate Dataset for the requested operation.
+    
+    Args:
+        normal_count: Count of normal used by the operation.
+        fraud_count: Count of fraud used by the operation.
+        gray_count: Count of gray used by the operation.
+        seed: The seed value used by this operation.
+    
+    Returns:
+        Operation result represented as `list[dict[str, Any]]`.
+    """
     random.seed(seed)
     rows: list[dict[str, Any]] = []
     for _ in range(normal_count):
@@ -65,6 +77,16 @@ def write_dataset(
     csv_path: str | Path = "data/synthetic_fraud_dataset.csv",
     metadata_path: str | Path = "data/synthetic_fraud_dataset_metadata.json",
 ) -> dict[str, Any]:
+    """
+    Write Dataset for the requested operation.
+    
+    Args:
+        csv_path: The csv path value used by this operation.
+        metadata_path: The metadata path value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     rows = generate_dataset()
     csv_path = Path(csv_path)
     metadata_path = Path(metadata_path)
@@ -91,6 +113,17 @@ def write_dataset(
 
 
 def _base(label: int, scenario: str, confidence: float) -> dict[str, Any]:
+    """
+    Base for the requested operation.
+    
+    Args:
+        label: The label value used by this operation.
+        scenario: The scenario value used by this operation.
+        confidence: The confidence value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     row = {column: 0 for column in FEATURE_COLUMNS}
     row.update(
         {
@@ -118,6 +151,17 @@ def _base(label: int, scenario: str, confidence: float) -> dict[str, Any]:
 
 
 def _row_for_scenario(scenario: str, label: int, confidence: float) -> dict[str, Any]:
+    """
+    Row For Scenario for the requested operation.
+    
+    Args:
+        scenario: The scenario value used by this operation.
+        label: The label value used by this operation.
+        confidence: The confidence value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     row = _base(label, scenario, confidence)
     if scenario == "NORMAL_TWO_PDFS":
         row["pdf_attempts_last_10_min"] = random.randint(1, 2)

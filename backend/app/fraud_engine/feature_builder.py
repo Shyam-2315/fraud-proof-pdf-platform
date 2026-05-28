@@ -19,6 +19,9 @@ from app.utils.security import generate_uuid, utc_now
 
 
 class FeatureBuilder:
+    """
+    Fraud-detection component used to score, classify, or train signals.
+    """
     def __init__(
         self,
         repository: FraudEngineRepository | None = None,
@@ -30,6 +33,22 @@ class FeatureBuilder:
         behavior_analyzer: BehaviorAnalyzer | None = None,
         ip_intelligence_service: IPIntelligenceService | None = None,
     ) -> None:
+        """
+        Initialize the fraud-detection component and its collaborators.
+        
+        Args:
+            repository: The repository value used by this operation.
+            visitor_repository: The visitor repository value used by this operation.
+            fraud_event_repository: The fraud event repository value used by this operation.
+            identity_link_repository: The identity link repository value used by this operation.
+            ip_repository: The ip repository value used by this operation.
+            user_repository: The user repository value used by this operation.
+            behavior_analyzer: The behavior analyzer value used by this operation.
+            ip_intelligence_service: The ip intelligence service value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.repository = repository or FraudEngineRepository()
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.fraud_event_repository = fraud_event_repository or FraudEventRepository()
@@ -49,6 +68,21 @@ class FeatureBuilder:
         context: dict[str, Any] | None = None,
         store_snapshot: bool = True,
     ) -> dict[str, Any]:
+        """
+        Build for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            action_type: The action type value used by this operation.
+            user: User record involved in the operation.
+            payload: Validated request payload for this operation.
+            context: Additional contextual data that influences the operation.
+            store_snapshot: The store snapshot value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         context = context or {}
         now = utc_now()
         visitor = visitor or {}
@@ -186,6 +220,15 @@ class FeatureBuilder:
 
 
 def _unique(values: list[Any]) -> list[Any]:
+    """
+    Unique for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `list[Any]`.
+    """
     result = []
     for value in values:
         if value and value not in result:
@@ -194,10 +237,28 @@ def _unique(values: list[Any]) -> list[Any]:
 
 
 def _last(values: list[Any]) -> Any:
+    """
+    Last for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `Any`.
+    """
     return values[-1] if values else None
 
 
 def _aware(value: Any) -> datetime | None:
+    """
+    Aware for the requested operation.
+    
+    Args:
+        value: Value processed by the helper.
+    
+    Returns:
+        Operation result represented as `datetime | None`.
+    """
     if not isinstance(value, datetime):
         return None
     if value.tzinfo is None:
@@ -206,6 +267,16 @@ def _aware(value: Any) -> datetime | None:
 
 
 def _count_recent_unique(observations: list[dict[str, Any]], since: datetime) -> int:
+    """
+    Count Recent Unique for the requested operation.
+    
+    Args:
+        observations: The observations value used by this operation.
+        since: The since value used by this operation.
+    
+    Returns:
+        Operation result represented as `int`.
+    """
     values = set()
     for observation in observations:
         created_at = _aware(observation.get("created_at"))
@@ -215,11 +286,29 @@ def _count_recent_unique(observations: list[dict[str, Any]], since: datetime) ->
 
 
 def _headless_user_agent(user_agent: str) -> bool:
+    """
+    Headless User Agent for the requested operation.
+    
+    Args:
+        user_agent: User-Agent string supplied by the client.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     value = user_agent.lower()
     return "headless" in value or "phantomjs" in value or "selenium" in value
 
 
 def _missing_browser_headers(headers: dict[str, str]) -> bool:
+    """
+    Missing Browser Headers for the requested operation.
+    
+    Args:
+        headers: The headers value used by this operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     if not headers:
         return True
     normalized = {key.lower(): value for key, value in headers.items()}
@@ -230,6 +319,16 @@ def _missing_browser_headers(headers: dict[str, str]) -> bool:
 
 
 def _same_ip_only(visitor: dict[str, Any], confidence: int) -> bool:
+    """
+    Same Ip Only for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+        confidence: The confidence value used by this operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     return (
         len(visitor.get("ip_addresses", [])) > 0
         and len(visitor.get("fingerprint_hashes", [])) <= 1

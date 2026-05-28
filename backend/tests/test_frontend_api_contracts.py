@@ -43,8 +43,13 @@ def test_generate_page_identifies_before_status_and_before_generate() -> None:
     _require_frontend_source()
     source = (FRONTEND_SRC / "pages" / "GeneratePage.tsx").read_text(encoding="utf-8")
 
-    assert source.index("await ensureVisitorIdentified();\n        await sendBehaviorEvent") < source.index("await refreshStatus();")
-    assert "await ensureVisitorIdentified();\n      const result = await generatePdf(values);" in source
+    identify_index = source.index("await ensureVisitorIdentified();")
+    behavior_index = source.index('await sendBehaviorEvent("PAGE_VIEW", { page: "generate" });')
+    refresh_index = source.index("await refreshStatus();")
+    generate_index = source.index("const result = await generatePdf(values);")
+
+    assert identify_index < behavior_index < refresh_index
+    assert source.rfind("await ensureVisitorIdentified();", 0, generate_index) != -1
 
 
 def test_frontend_exposes_verify_email_route_and_api_calls() -> None:

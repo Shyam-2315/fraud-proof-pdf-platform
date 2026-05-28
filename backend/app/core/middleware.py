@@ -12,11 +12,24 @@ logger = logging.getLogger("app.request")
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
+    """
+    Core infrastructure helper used by the application runtime.
+    """
     async def dispatch(
         self,
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        """
+        Attach a stable request ID to the request state and response headers.
+
+        Args:
+            request: Incoming HTTP request being processed.
+            call_next: Middleware callback that forwards the request.
+
+        Returns:
+            HTTP response with the request ID header attached.
+        """
         request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
         request.state.request_id = request_id
 
@@ -26,11 +39,24 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Core infrastructure helper used by the application runtime.
+    """
     async def dispatch(
         self,
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        """
+        Record structured timing and request metadata for every request.
+
+        Args:
+            request: Incoming HTTP request being processed.
+            call_next: Middleware callback that forwards the request.
+
+        Returns:
+            HTTP response produced by downstream handlers.
+        """
         started_at = time.perf_counter()
         status_code = 500
 
@@ -65,11 +91,24 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Core infrastructure helper used by the application runtime.
+    """
     async def dispatch(
         self,
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        """
+        Apply a baseline set of security headers to every response.
+
+        Args:
+            request: Incoming HTTP request being processed.
+            call_next: Middleware callback that forwards the request.
+
+        Returns:
+            HTTP response with security headers attached.
+        """
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"

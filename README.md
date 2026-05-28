@@ -37,12 +37,19 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system diagram and requ
 ```text
 backend/
   app/
+    api/
+      legacy/
+      v1/
+        endpoints/
+    core/
+      config/
   tests/
   scripts/
   data/
   requirements.txt
   start_render.sh
   .env.example
+  .env.dev.example
   .env.production.example
 
 frontend/
@@ -93,11 +100,26 @@ cp frontend/.env.example frontend/.env
 cp pdfcraft-guardian-main/.env.example pdfcraft-guardian-main/.env
 ```
 
+Backend config selection is controlled by `APP_ENV`:
+
+- `APP_ENV=local` uses `LocalSettings` with safe defaults for local Docker and workstation development.
+- `APP_ENV=dev` uses `DevSettings` and requires explicit URLs, database URLs, Redis URL, and secrets from environment variables.
+- `APP_ENV=production` uses `ProductionSettings`, disables API docs by default, and requires secure environment-provided values.
+
+Additional backend examples:
+
+```bash
+cp backend/.env.dev.example backend/.env.dev
+cp backend/.env.production.example backend/.env.production
+```
+
 Start the local stack:
 
 ```bash
 ./start.sh
 ```
+
+`docker-compose.yml` forces `APP_ENV=local` for the backend container.
 
 Local URLs:
 
@@ -116,6 +138,7 @@ Stop the stack:
 
 Backend highlights:
 
+- `APP_ENV`
 - `MONGODB_URL`
 - `MONGODB_DB_NAME`
 - `REDIS_URL`
@@ -136,6 +159,9 @@ Backend highlights:
 - `EMAIL_VERIFICATION_OTP_TTL_MINUTES`
 - `EMAIL_VERIFICATION_MAX_ATTEMPTS`
 - `EMAIL_VERIFICATION_RESEND_COOLDOWN_SECONDS`
+- `AUTHENTICATED_PDF_GENERATE_RATE_LIMIT`
+- `MAXMIND_ACCOUNT_ID`
+- `MAXMIND_LICENSE_KEY`
 
 Frontend highlights:
 
@@ -152,7 +178,27 @@ Backend:
 ```bash
 cd backend
 pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8025 --reload
+APP_ENV=local uvicorn app.main:app --host 0.0.0.0 --port 8025 --reload
+```
+
+Backend in dev mode:
+
+```bash
+cd backend
+set -a
+source .env.dev
+set +a
+APP_ENV=dev uvicorn app.main:app --host 0.0.0.0 --port 8025
+```
+
+Backend in production mode:
+
+```bash
+cd backend
+set -a
+source .env.production
+set +a
+APP_ENV=production uvicorn app.main:app --host 0.0.0.0 --port 8025
 ```
 
 Customer frontend:
@@ -185,6 +231,12 @@ Backend tests in the running container:
 docker exec fraud-pdf-backend python -m pytest
 ```
 
+Focused backend tests added for this refactor:
+
+```bash
+docker exec fraud-pdf-backend python -m pytest tests/test_config_loading.py tests/test_api_versioning.py
+```
+
 Customer frontend build:
 
 ```bash
@@ -212,13 +264,69 @@ Deployment checklist:
 
 1. Configure MongoDB Atlas and collect the connection string.
 2. Configure Upstash Redis and collect the `rediss://` connection URL.
-3. Set Render backend environment variables from `backend/.env.production.example`.
+3. Set Render backend environment variables from `backend/.env.production.example` and keep `APP_ENV=production`.
 4. Set Vercel frontend environment variables from `frontend/.env.production.example`.
 5. Set Vercel admin environment variables from `pdfcraft-guardian-main/.env.production.example`.
 6. Configure the Brevo API key and verified sender in Render. Use SMTP only as fallback if HTTPS delivery is unavailable.
 7. Redeploy Render and Vercel after configuration changes.
 
 Detailed instructions are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
+## Backend Structure
+
+The backend is now organized around a versioned API and environment-aware core modules:
+
+```text
+backend/app/
+  main.py
+  api/
+    legacy/router.py
+    v1/
+      router.py
+      endpoints/
+        account.py
+        admin.py
+        auth.py
+        behavior.py
+        pdf.py
+        public.py
+        visitor.py
+  core/
+    config/
+      base.py
+      local.py
+      dev.py
+      production.py
+    auth.py
+    database.py
+    logging.py
+    middleware.py
+    security.py
+  models/
+  repositories/
+  routes/
+  schemas/
+  services/
+  utils/
+```
+
+Notes:
+
+- `app.api.v1.router` is the preferred API surface and mounts endpoints under `/api/v1/...`.
+- `app.api.legacy.router` mounts the same routers under `/api/...` so current frontends and tests continue to work.
+- `app.config` and `app.database` remain compatibility shims for existing imports.
+
+## API Versioning
+
+Preferred routes now live under `/api/v1`, for example:
+
+- `/api/v1/auth/*`
+- `/api/v1/pdf/*`
+- `/api/v1/account/*`
+- `/api/v1/admin/*`
+- `/api/v1/visitor/*`
+
+Legacy `/api/*` routes are still mounted for backward compatibility. Existing customer and admin frontends do not need immediate route changes.
 
 ## Demo Flow
 

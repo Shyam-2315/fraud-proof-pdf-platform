@@ -6,6 +6,9 @@ IP_INTELLIGENCE_COLLECTION = "ip_intelligence"
 
 
 class RiskLevel(StrEnum):
+    """
+    Model describing the risk level domain object.
+    """
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"

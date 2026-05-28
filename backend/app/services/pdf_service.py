@@ -41,9 +41,13 @@ from app.utils.pdf_generator import generate_simple_pdf
 from app.utils.security import generate_uuid, normalize_ip, utc_now
 
 logger = logging.getLogger(__name__)
+_AUTH_CONTEXT_UNSET = object()
 
 
 class PDFService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         visitor_repository: VisitorRepository | None = None,
@@ -58,6 +62,25 @@ class PDFService:
         ip_intelligence: IPIntelligence | None = None,
         risk_engine: RiskEngine | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            visitor_repository: The visitor repository value used by this operation.
+            pdf_repository: The pdf repository value used by this operation.
+            fraud_service: The fraud service value used by this operation.
+            fraud_event_service: The fraud event service value used by this operation.
+            user_usage_service: The user usage service value used by this operation.
+            fraud_decision_service: The fraud decision service value used by this operation.
+            behavior_service: The behavior service value used by this operation.
+            visitor_service: The visitor service value used by this operation.
+            anonymous_usage_service: The anonymous usage service value used by this operation.
+            ip_intelligence: The ip intelligence value used by this operation.
+            risk_engine: The risk engine value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.pdf_repository = pdf_repository or PDFRepository()
@@ -76,14 +99,37 @@ class PDFService:
         request: Request,
         payload: PDFGenerateRequest,
     ) -> PDFGenerateResponse:
+        """
+        Generate a PDF while enforcing usage, fraud, and ownership rules.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            payload: Validated request payload for this operation.
+        
+        Returns:
+            Operation result represented as `PDFGenerateResponse`.
+        """
         return await self.generate_pdf(request=request, payload=payload)
 
     async def generate_pdf(
         self,
         request: Request,
         payload: PDFGenerateRequest,
+        current_user: dict[str, Any] | None | object = _AUTH_CONTEXT_UNSET,
     ) -> PDFGenerateResponse:
-        current_user = await get_current_user_optional(request)
+        """
+        Generate a PDF while enforcing usage, fraud, and ownership rules.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            payload: Validated request payload for this operation.
+            current_user: Optional authenticated user already resolved by the caller.
+        
+        Returns:
+            Operation result represented as `PDFGenerateResponse`.
+        """
+        if current_user is _AUTH_CONTEXT_UNSET:
+            current_user = await get_current_user_optional(request)
         if current_user is not None:
             visitor = await self._get_optional_visitor_from_request(request)
             return await self._generate_pdf_for_authenticated_user(
@@ -106,6 +152,21 @@ class PDFService:
         payload: PDFGenerateRequest,
         visitor: dict[str, Any],
     ) -> PDFGenerateResponse:
+        """
+        Generate Pdf For Anonymous Visitor for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            payload: Validated request payload for this operation.
+            visitor: Visitor record involved in the operation.
+        
+        Returns:
+            Operation result represented as `PDFGenerateResponse`.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+            RuntimeError: If required runtime dependencies cannot complete the operation.
+        """
         ip_details = get_client_ip_details(request)
         ip_address = get_normalized_client_ip(request)
         anon_id = request.headers.get("X-Anon-Id") or get_visitor_cookie(request.cookies)
@@ -380,9 +441,27 @@ class PDFService:
         )
 
     async def get_pdf_history_for_visitor(self, request: Request) -> PDFHistoryResponse:
+        """
+        Return pdf history for visitor data for the service workflow.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return await self.get_pdf_history(request=request)
 
     async def get_my_pdf_history(self, request: Request) -> MyPDFHistoryResponse:
+        """
+        Return my pdf history data for the service workflow.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Matching record or value when available.
+        """
         current_user = await get_current_user_optional(request)
         if current_user is not None:
             pdf_records = await self.pdf_repository.list_by_user_id(current_user["_id"])
@@ -398,6 +477,15 @@ class PDFService:
         )
 
     async def get_pdf_history(self, request: Request) -> PDFHistoryResponse:
+        """
+        Return pdf history data for the service workflow.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Matching record or value when available.
+        """
         current_user = await get_current_user_optional(request)
         if current_user is not None:
             visitor = await self._get_optional_visitor_from_request(request)
@@ -436,6 +524,21 @@ class PDFService:
         current_user: dict[str, Any],
         visitor: dict[str, Any] | None,
     ) -> PDFGenerateResponse:
+        """
+        Generate Pdf For Authenticated User for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            payload: Validated request payload for this operation.
+            current_user: Authenticated user document resolved for the current request.
+            visitor: Visitor record involved in the operation.
+        
+        Returns:
+            Operation result represented as `PDFGenerateResponse`.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         usage = await self.user_usage_service.get_current_usage(current_user)
         if usage["used"] >= usage["limit"]:
             raise HTTPException(
@@ -540,6 +643,20 @@ class PDFService:
         pdf_id: str,
         allow_admin: bool = False,
     ) -> dict[str, Any]:
+        """
+        Return downloadable pdf data for the service workflow.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            pdf_id: Unique pdf identifier used by the operation.
+            allow_admin: Boolean flag controlling whether admin is allowed.
+        
+        Returns:
+            Matching record or value when available.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         pdf_record = await self.pdf_repository.get_by_id(pdf_id)
         if pdf_record is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="PDF not found.")
@@ -571,6 +688,17 @@ class PDFService:
         current_user: dict[str, Any] | None,
         visitor: dict[str, Any] | None,
     ) -> None:
+        """
+        Record Download Decision for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            current_user: Authenticated user document resolved for the current request.
+            visitor: Visitor record involved in the operation.
+        
+        Returns:
+            None.
+        """
         if visitor is None:
             return
         await self.fraud_decision_service.decide(
@@ -582,6 +710,18 @@ class PDFService:
         )
 
     async def _get_visitor_from_request(self, request: Request) -> dict[str, Any]:
+        """
+        Get Visitor From Request for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        
+        Raises:
+            HTTPException: If request validation, authorization, fraud checks, or rate limits fail.
+        """
         visitor = await self.visitor_service.find_visitor_from_request(request)
         if visitor is None:
             raise HTTPException(
@@ -594,6 +734,15 @@ class PDFService:
         self,
         request: Request,
     ) -> dict[str, Any] | None:
+        """
+        Get Optional Visitor From Request for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+        
+        Returns:
+            Operation result represented as `dict[str, Any] | None`.
+        """
         return await self.visitor_service.find_visitor_from_request(request)
 
     async def _create_pdf_fraud_event(
@@ -605,6 +754,20 @@ class PDFService:
         risk_points: int,
         message: str,
     ) -> None:
+        """
+        Create Pdf Fraud Event for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            event_type: Event type filter or value used by the operation.
+            severity: Severity filter or value used by the operation.
+            risk_points: The risk points value used by this operation.
+            message: The message value used by this operation.
+        
+        Returns:
+            None.
+        """
         await self.fraud_service.create_fraud_events(
             visitor_id=visitor["_id"],
             events=[
@@ -628,6 +791,15 @@ class PDFService:
         )
 
     async def _behavior_summary(self, visitor_id: str) -> dict[str, bool]:
+        """
+        Behavior Summary for the requested operation.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, bool]`.
+        """
         recent_generate_clicks = await self.behavior_service.repository.count_by_visitor(
             visitor_id,
             event_type="GENERATE_CLICKED",
@@ -644,6 +816,15 @@ class PDFService:
 
 
 def _build_history_item(pdf_record: dict[str, Any]) -> PDFHistoryItem:
+    """
+    Build History Item for the requested operation.
+    
+    Args:
+        pdf_record: The pdf record value used by this operation.
+    
+    Returns:
+        Operation result represented as `PDFHistoryItem`.
+    """
     return PDFHistoryItem(
         pdf_id=pdf_record["_id"],
         title=pdf_record.get("title", ""),
@@ -654,6 +835,15 @@ def _build_history_item(pdf_record: dict[str, Any]) -> PDFHistoryItem:
 
 
 def _build_my_history_item(pdf_record: dict[str, Any]) -> MyPDFHistoryItem:
+    """
+    Build My History Item for the requested operation.
+    
+    Args:
+        pdf_record: The pdf record value used by this operation.
+    
+    Returns:
+        Operation result represented as `MyPDFHistoryItem`.
+    """
     return MyPDFHistoryItem(
         pdf_id=pdf_record["_id"],
         title=pdf_record.get("title", ""),
@@ -664,10 +854,28 @@ def _build_my_history_item(pdf_record: dict[str, Any]) -> MyPDFHistoryItem:
 
 
 def _last_or_none(values: list[Any]) -> Any:
+    """
+    Last Or None for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `Any`.
+    """
     return values[-1] if values else None
 
 
 def _first_or_empty(values: list[str]) -> str:
+    """
+    First Or Empty for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     return values[0] if values else ""
 
 
@@ -676,6 +884,17 @@ def _build_limit_response(
     free_limit: int | None = None,
     used: int | None = None,
 ) -> dict[str, bool | int | str]:
+    """
+    Build Limit Response for the requested operation.
+    
+    Args:
+        message: The message value used by this operation.
+        free_limit: The free limit value used by this operation.
+        used: The used value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, bool | int | str]`.
+    """
     response: dict[str, bool | int | str] = {
         "success": False,
         "message": message,
@@ -689,6 +908,16 @@ def _build_limit_response(
 
 
 def _build_block_response(free_limit: int, used: int) -> dict[str, bool | str]:
+    """
+    Build Block Response for the requested operation.
+    
+    Args:
+        free_limit: The free limit value used by this operation.
+        used: The used value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, bool | str]`.
+    """
     return {
         "success": False,
         "message": "We could not process this request right now. Please try again later.",
@@ -696,6 +925,16 @@ def _build_block_response(free_limit: int, used: int) -> dict[str, bool | str]:
 
 
 def _severity_for_decision(decision: str, risk_level: str) -> str:
+    """
+    Severity For Decision for the requested operation.
+    
+    Args:
+        decision: The decision value used by this operation.
+        risk_level: Risk level filter or value used by the operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     if decision == "BLOCK" or risk_level == "CRITICAL":
         return AdminFraudSeverity.CRITICAL.value
     if decision == "REQUIRE_LOGIN" or risk_level == "HIGH":
@@ -706,6 +945,15 @@ def _severity_for_decision(decision: str, risk_level: str) -> str:
 
 
 def _decision_reason_text(decision: dict[str, Any]) -> str | None:
+    """
+    Decision Reason Text for the requested operation.
+    
+    Args:
+        decision: The decision value used by this operation.
+    
+    Returns:
+        Operation result represented as `str | None`.
+    """
     reasons = decision.get("reasons") or []
     if not reasons:
         return None

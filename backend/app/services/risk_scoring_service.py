@@ -18,6 +18,9 @@ from app.utils.security import generate_uuid, utc_now
 
 
 class RiskScoringService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         visitor_repository: VisitorRepository | None = None,
@@ -28,6 +31,21 @@ class RiskScoringService:
         fraud_event_service: FraudEventService | None = None,
         ip_intelligence_service: IPIntelligenceService | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            visitor_repository: The visitor repository value used by this operation.
+            user_repository: The user repository value used by this operation.
+            behavior_repository: The behavior repository value used by this operation.
+            fraud_event_repository: The fraud event repository value used by this operation.
+            snapshot_repository: The snapshot repository value used by this operation.
+            fraud_event_service: The fraud event service value used by this operation.
+            ip_intelligence_service: The ip intelligence service value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.user_repository = user_repository or UserRepository()
         self.behavior_repository = behavior_repository or BehaviorEventRepository()
@@ -45,6 +63,20 @@ class RiskScoringService:
         context: dict[str, Any] | None = None,
         user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Score Visitor for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            action_type: The action type value used by this operation.
+            payload: Validated request payload for this operation.
+            context: Additional contextual data that influences the operation.
+            user: User record involved in the operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         context = context or {}
         reasons: list[str] = []
         signals: dict[str, Any] = {"action_type": action_type}
@@ -56,6 +88,17 @@ class RiskScoringService:
         automation_signals = _automation_signals(visitor, payload, context)
 
         def add(points: int, reason: str, **extra: Any) -> None:
+            """
+            Add for the requested operation.
+            
+            Args:
+                points: The points value used by this operation.
+                reason: The reason value used by this operation.
+                **extra: The extra value used by this operation.
+            
+            Returns:
+                None.
+            """
             nonlocal score
             score += points
             reasons.append(reason)
@@ -174,6 +217,17 @@ class RiskScoringService:
         payload: Any | None,
         add: Any,
     ) -> None:
+        """
+        Score Behavior for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            payload: Validated request payload for this operation.
+            add: The add value used by this operation.
+        
+        Returns:
+            None.
+        """
         now = utc_now()
         first_event = await self.behavior_repository.first_event(visitor["_id"])
         event_count = await self.behavior_repository.count_by_visitor(visitor["_id"])
@@ -212,6 +266,19 @@ class RiskScoringService:
         reason: str,
         metadata: dict[str, Any],
     ) -> None:
+        """
+        Admin Signal Event for the requested operation.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            event_type: Event type filter or value used by the operation.
+            severity: Severity filter or value used by the operation.
+            reason: The reason value used by this operation.
+            metadata: Additional metadata stored with the record or event.
+        
+        Returns:
+            None.
+        """
         await self.fraud_event_service.create_event(
             visitor_id=visitor["_id"],
             event_type=event_type,
@@ -232,6 +299,15 @@ class RiskScoringService:
 
 
 def calculate_risk_level(score: int) -> str:
+    """
+    Calculate Risk Level for the requested operation.
+    
+    Args:
+        score: The score value used by this operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     if score <= 29:
         return RiskLevel.LOW.value
     if score <= 59:
@@ -242,6 +318,15 @@ def calculate_risk_level(score: int) -> str:
 
 
 def _severity_for_level(level: str) -> str:
+    """
+    Severity For Level for the requested operation.
+    
+    Args:
+        level: The level value used by this operation.
+    
+    Returns:
+        Operation result represented as `str`.
+    """
     if level == RiskLevel.CRITICAL.value:
         return FraudSeverity.CRITICAL.value
     if level == RiskLevel.HIGH.value:
@@ -256,6 +341,17 @@ def _automation_signals(
     payload: Any | None,
     context: dict[str, Any],
 ) -> dict[str, Any]:
+    """
+    Automation Signals for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+        payload: Validated request payload for this operation.
+        context: Additional contextual data that influences the operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     signals = dict(visitor.get("automation_signals", {}))
     payload_signals = getattr(payload, "automation_signals", None)
     if payload_signals:
@@ -268,11 +364,30 @@ def _automation_signals(
 
 
 def _headless_user_agent(user_agent: str) -> bool:
+    """
+    Headless User Agent for the requested operation.
+    
+    Args:
+        user_agent: User-Agent string supplied by the client.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     value = user_agent.lower()
     return "headless" in value or "phantomjs" in value or "selenium" in value
 
 
 def _zero_plugins_in_browser(user_agent: str, automation_signals: dict[str, Any]) -> bool:
+    """
+    Zero Plugins In Browser for the requested operation.
+    
+    Args:
+        user_agent: User-Agent string supplied by the client.
+        automation_signals: The automation signals value used by this operation.
+    
+    Returns:
+        Operation result represented as `bool`.
+    """
     if automation_signals.get("plugins_count") != 0:
         return False
     value = user_agent.lower()
@@ -280,6 +395,16 @@ def _zero_plugins_in_browser(user_agent: str, automation_signals: dict[str, Any]
 
 
 def _count_recent_unique(observations: list[dict[str, Any]], since: Any) -> int:
+    """
+    Count Recent Unique for the requested operation.
+    
+    Args:
+        observations: The observations value used by this operation.
+        since: The since value used by this operation.
+    
+    Returns:
+        Operation result represented as `int`.
+    """
     values = set()
     for observation in observations:
         created_at = _aware(observation.get("created_at"))
@@ -289,6 +414,15 @@ def _count_recent_unique(observations: list[dict[str, Any]], since: Any) -> int:
 
 
 def _aware(value: Any) -> datetime | None:
+    """
+    Aware for the requested operation.
+    
+    Args:
+        value: Value processed by the helper.
+    
+    Returns:
+        Operation result represented as `datetime | None`.
+    """
     if not isinstance(value, datetime):
         return None
     if value.tzinfo is None:
@@ -297,6 +431,15 @@ def _aware(value: Any) -> datetime | None:
 
 
 def _unique(values: list[Any]) -> list[Any]:
+    """
+    Unique for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `list[Any]`.
+    """
     result = []
     for value in values:
         if value and value not in result:
@@ -305,10 +448,28 @@ def _unique(values: list[Any]) -> list[Any]:
 
 
 def _last(values: list[Any]) -> Any:
+    """
+    Last for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `Any`.
+    """
     return values[-1] if values else None
 
 
 def _public_ip_intel(record: dict[str, Any]) -> dict[str, Any]:
+    """
+    Public Ip Intel for the requested operation.
+    
+    Args:
+        record: The record value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {
         "is_vpn": bool(record.get("is_vpn", False)),
         "is_proxy": bool(record.get("is_proxy", False)),

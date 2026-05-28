@@ -10,10 +10,22 @@ from app.utils.request_utils import get_client_ip
 from app.utils.security import generate_uuid, normalize_ip, utc_now
 
 class FraudEventService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         repository: FraudEventRepository | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.repository = repository or FraudEventRepository()
 
     async def create_event(
@@ -34,6 +46,29 @@ class FraudEventService:
         user_agent: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Create event for the requested operation.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+            event_type: Event type filter or value used by the operation.
+            severity: Severity filter or value used by the operation.
+            action: The action value used by this operation.
+            allowed: The allowed value used by this operation.
+            reason: The reason value used by this operation.
+            risk_score: The risk score value used by this operation.
+            risk_level: Risk level filter or value used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            local_storage_id: Unique local storage identifier used by the operation.
+            session_id: Unique session identifier used by the operation.
+            cookie_id: Unique cookie identifier used by the operation.
+            ip_address: IP address being analyzed or persisted.
+            user_agent: User-Agent string supplied by the client.
+            metadata: Additional metadata stored with the record or event.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         event_id = generate_uuid()
         event_data = {
             "_id": event_id,
@@ -71,6 +106,25 @@ class FraudEventService:
         session_id: str | None = None,
         fingerprint_hash: str | None = None,
     ) -> dict[str, Any]:
+        """
+        Create from request for the requested operation.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            visitor: Visitor record involved in the operation.
+            event_type: Event type filter or value used by the operation.
+            severity: Severity filter or value used by the operation.
+            action: The action value used by this operation.
+            allowed: The allowed value used by this operation.
+            reason: The reason value used by this operation.
+            metadata: Additional metadata stored with the record or event.
+            local_storage_id: Unique local storage identifier used by the operation.
+            session_id: Unique session identifier used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         return await self.create_event(
             visitor_id=visitor.get("_id"),
             event_type=event_type,
@@ -103,6 +157,15 @@ class FraudEventService:
 
 
 def build_fraud_event_item(event: dict[str, Any]) -> FraudEventItem:
+    """
+    Build fraud event item data for the service workflow.
+    
+    Args:
+        event: The event value used by this operation.
+    
+    Returns:
+        Constructed result for the requested operation.
+    """
     signals = event.get("signals", {})
     metadata = dict(event.get("metadata", {}))
     if event.get("message") and "message" not in metadata:
@@ -132,4 +195,13 @@ def build_fraud_event_item(event: dict[str, Any]) -> FraudEventItem:
 
 
 def _last_or_none(values: list[Any]) -> Any:
+    """
+    Last Or None for the requested operation.
+    
+    Args:
+        values: Mapping of values processed by the helper.
+    
+    Returns:
+        Operation result represented as `Any`.
+    """
     return values[-1] if values else None

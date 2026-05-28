@@ -12,10 +12,27 @@ logger = logging.getLogger(__name__)
 
 
 class BehaviorEventRepository:
+    """Persist and query visitor behavior telemetry events."""
+
     def get_collection(self) -> AsyncIOMotorCollection:
+        """
+        Return the MongoDB collection storing behavior events.
+
+        Returns:
+            Motor collection for behavior-event documents.
+        """
         return get_database()[BEHAVIOR_EVENTS_COLLECTION]
 
     async def create(self, event: dict[str, Any]) -> dict[str, Any]:
+        """
+        Insert a behavior event document.
+
+        Args:
+            event: Behavior event payload to persist.
+
+        Returns:
+            Inserted behavior event document.
+        """
         await self.get_collection().insert_one(event)
         return event
 
@@ -24,6 +41,16 @@ class BehaviorEventRepository:
         visitor_id: str,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
+        """
+        Return recent behavior events for a visitor.
+
+        Args:
+            visitor_id: Visitor whose events should be listed.
+            limit: Maximum number of events to return.
+
+        Returns:
+            Recent behavior-event documents for the visitor.
+        """
         cursor = (
             self.get_collection()
             .find({"visitor_id": visitor_id})
@@ -38,6 +65,17 @@ class BehaviorEventRepository:
         event_type: str | None = None,
         since: datetime | None = None,
     ) -> int:
+        """
+        Count behavior events for a visitor with optional filters.
+
+        Args:
+            visitor_id: Visitor whose events should be counted.
+            event_type: Optional event-type filter.
+            since: Optional lower timestamp bound.
+
+        Returns:
+            Number of matching behavior events.
+        """
         query: dict[str, Any] = {"visitor_id": visitor_id}
         if event_type is not None:
             query["event_type"] = event_type
@@ -46,6 +84,15 @@ class BehaviorEventRepository:
         return await self.get_collection().count_documents(query)
 
     async def first_event(self, visitor_id: str) -> dict[str, Any] | None:
+        """
+        Return the earliest behavior event recorded for a visitor.
+
+        Args:
+            visitor_id: Visitor whose first event should be loaded.
+
+        Returns:
+            Earliest behavior event document, or ``None`` when no events exist.
+        """
         return await self.get_collection().find_one(
             {"visitor_id": visitor_id},
             sort=[("created_at", ASCENDING)],
@@ -57,6 +104,17 @@ class BehaviorEventRepository:
         content_hash: str | None,
         since: datetime | None = None,
     ) -> int:
+        """
+        Count repeated behavior events for the same content hash.
+
+        Args:
+            visitor_id: Visitor whose events should be inspected.
+            content_hash: Content hash used to group repeated content.
+            since: Optional lower timestamp bound.
+
+        Returns:
+            Number of matching content-hash events.
+        """
         if not content_hash:
             return 0
         query: dict[str, Any] = {
@@ -69,6 +127,7 @@ class BehaviorEventRepository:
 
 
 async def ensure_behavior_indexes() -> None:
+    """Create MongoDB indexes required for behavior-event queries."""
     collection = BehaviorEventRepository().get_collection()
     await collection.create_index(
         [("visitor_id", ASCENDING)],

@@ -6,11 +6,24 @@ from app.repositories.visitor_repository import VisitorRepository
 
 
 class IdentityGraphService:
+    """
+    Fraud-detection component used to score, classify, or train signals.
+    """
     def __init__(
         self,
         visitor_repository: VisitorRepository | None = None,
         identity_link_repository: IdentityLinkRepository | None = None,
     ) -> None:
+        """
+        Initialize the fraud-detection component and its collaborators.
+        
+        Args:
+            visitor_repository: The visitor repository value used by this operation.
+            identity_link_repository: The identity link repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.visitor_repository = visitor_repository or VisitorRepository()
         self.identity_link_repository = identity_link_repository or IdentityLinkRepository()
 
@@ -18,6 +31,15 @@ class IdentityGraphService:
         self,
         signals: dict[str, Any],
     ) -> dict[str, Any] | None:
+        """
+        Find strong match for the requested operation.
+        
+        Args:
+            signals: The signals value used by this operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         candidates = await self._candidate_visitors(signals, strong_only=True)
         best: dict[str, Any] | None = None
         best_confidence = 0
@@ -32,6 +54,15 @@ class IdentityGraphService:
         self,
         signals: dict[str, Any],
     ) -> dict[str, Any] | None:
+        """
+        Find related match for the requested operation.
+        
+        Args:
+            signals: The signals value used by this operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         candidates = await self._candidate_visitors(signals, strong_only=False)
         best: dict[str, Any] | None = None
         best_confidence = 0
@@ -51,6 +82,20 @@ class IdentityGraphService:
         reason: str,
         matched_signals: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Create identity link for the requested operation.
+        
+        Args:
+            source_visitor_id: Unique source visitor identifier used by the operation.
+            target_visitor_id: Unique target visitor identifier used by the operation.
+            link_type: The link type value used by this operation.
+            confidence: The confidence value used by this operation.
+            reason: The reason value used by this operation.
+            matched_signals: The matched signals value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         return await self.identity_link_repository.create_link(
             source_visitor_id=source_visitor_id,
             target_visitor_id=target_visitor_id,
@@ -64,6 +109,15 @@ class IdentityGraphService:
         self,
         visitor_id: str,
     ) -> list[dict[str, Any]]:
+        """
+        Return links for visitor for the requested operation.
+        
+        Args:
+            visitor_id: Unique visitor identifier used by the operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         return await self.identity_link_repository.list_by_visitor_id(visitor_id)
 
     def calculate_match_confidence(
@@ -71,6 +125,16 @@ class IdentityGraphService:
         existing_visitor: dict[str, Any],
         incoming_signals: dict[str, Any],
     ) -> int:
+        """
+        Calculate Match Confidence for the requested operation.
+        
+        Args:
+            existing_visitor: The existing visitor value used by this operation.
+            incoming_signals: The incoming signals value used by this operation.
+        
+        Returns:
+            Operation result represented as `int`.
+        """
         return self.describe_match(existing_visitor, incoming_signals)["confidence"]
 
     def describe_match(
@@ -78,6 +142,16 @@ class IdentityGraphService:
         existing_visitor: dict[str, Any],
         incoming_signals: dict[str, Any],
     ) -> dict[str, Any]:
+        """
+        Describe Match for the requested operation.
+        
+        Args:
+            existing_visitor: The existing visitor value used by this operation.
+            incoming_signals: The incoming signals value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         checks = [
             (
                 "cookie_id",
@@ -178,6 +252,16 @@ class IdentityGraphService:
         signals: dict[str, Any],
         strong_only: bool,
     ) -> list[dict[str, Any]]:
+        """
+        Candidate Visitors for the requested operation.
+        
+        Args:
+            signals: The signals value used by this operation.
+            strong_only: The strong only value used by this operation.
+        
+        Returns:
+            Operation result represented as `list[dict[str, Any]]`.
+        """
         filters: list[dict[str, Any]] = []
         cookie_id = signals.get("cookie_id")
         if cookie_id:
@@ -209,6 +293,15 @@ class IdentityGraphService:
 
 
 def _cookie_ids(visitor: dict[str, Any]) -> list[str]:
+    """
+    Cookie Ids for the requested operation.
+    
+    Args:
+        visitor: Visitor record involved in the operation.
+    
+    Returns:
+        Operation result represented as `list[str]`.
+    """
     values = []
     if visitor.get("cookie_id"):
         values.append(visitor["cookie_id"])
@@ -220,6 +313,16 @@ def _matched_signals(
     signals: dict[str, Any],
     *names: str,
 ) -> dict[str, Any]:
+    """
+    Matched Signals for the requested operation.
+    
+    Args:
+        signals: The signals value used by this operation.
+        *names: The names value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     return {name: signals.get(name) for name in names if signals.get(name)}
 
 

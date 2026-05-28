@@ -6,6 +6,9 @@ ADMIN_AUDIT_LOGS_COLLECTION = "admin_audit_logs"
 
 
 class FraudEventType(StrEnum):
+    """
+    Model describing the fraud event type domain object.
+    """
     VISITOR_IDENTIFIED = "VISITOR_IDENTIFIED"
     PDF_GENERATION_ALLOWED = "PDF_GENERATION_ALLOWED"
     PDF_GENERATION_BLOCKED = "PDF_GENERATION_BLOCKED"
@@ -45,6 +48,9 @@ class FraudEventType(StrEnum):
 
 
 class FraudSeverity(StrEnum):
+    """
+    Model describing the fraud severity domain object.
+    """
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
@@ -52,6 +58,9 @@ class FraudSeverity(StrEnum):
 
 
 class AdminAuditAction(StrEnum):
+    """
+    Model describing the admin audit action domain object.
+    """
     ADMIN_VIEWED_FRAUD_EVENTS = "ADMIN_VIEWED_FRAUD_EVENTS"
     ADMIN_VIEWED_FRAUD_VISITORS = "ADMIN_VIEWED_FRAUD_VISITORS"
     ADMIN_VIEWED_FRAUD_SUMMARY = "ADMIN_VIEWED_FRAUD_SUMMARY"

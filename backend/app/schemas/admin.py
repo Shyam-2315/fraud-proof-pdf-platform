@@ -7,6 +7,9 @@ from email_validator import EmailNotValidError, validate_email
 
 
 class AdminDashboardResponse(BaseModel):
+    """
+    Schema describing the admin dashboard response payload.
+    """
     total_visitors: int
     total_users: int
     total_pdfs: int
@@ -25,6 +28,9 @@ class AdminDashboardResponse(BaseModel):
 
 
 class AdminVisitorListItem(BaseModel):
+    """
+    Schema describing the admin visitor list item payload.
+    """
     visitor_id: str
     free_usage_count: int
     free_usage_limit: int
@@ -42,6 +48,9 @@ class AdminVisitorListItem(BaseModel):
 
 
 class AdminVisitorDetailResponse(BaseModel):
+    """
+    Schema describing the admin visitor detail response payload.
+    """
     visitor_id: str
     cookie_id: str | None
     local_storage_ids: list[str]
@@ -66,6 +75,9 @@ class AdminVisitorDetailResponse(BaseModel):
 
 
 class AdminUserListItem(BaseModel):
+    """
+    Schema describing the admin user list item payload.
+    """
     user_id: str
     email: str
     full_name: str | None
@@ -78,6 +90,9 @@ class AdminUserListItem(BaseModel):
 
 
 class AdminPDFListItem(BaseModel):
+    """
+    Schema describing the admin pdf list item payload.
+    """
     pdf_id: str
     visitor_id: str | None
     user_id: str | None
@@ -91,6 +106,9 @@ class AdminPDFListItem(BaseModel):
 
 
 class AdminBlockedEntityItem(BaseModel):
+    """
+    Schema describing the admin blocked entity item payload.
+    """
     entity_id: str
     entity_type: str
     entity_value: str
@@ -102,6 +120,9 @@ class AdminBlockedEntityItem(BaseModel):
 
 
 class AdminListResponse(BaseModel):
+    """
+    Schema describing the admin list response payload.
+    """
     total: int
     limit: int
     offset: int
@@ -109,6 +130,9 @@ class AdminListResponse(BaseModel):
 
 
 class AdminSystemHealthResponse(BaseModel):
+    """
+    Schema describing the admin system health response payload.
+    """
     status: str
     service: str
     database: str
@@ -118,6 +142,9 @@ class AdminSystemHealthResponse(BaseModel):
 
 
 class AdminEmailStatusResponse(BaseModel):
+    """
+    Schema describing the admin email status response payload.
+    """
     provider: str
     smtp_host: str | None = None
     smtp_port: int | None = None
@@ -135,11 +162,26 @@ class AdminEmailStatusResponse(BaseModel):
 
 
 class AdminEmailTestRequest(BaseModel):
+    """
+    Schema describing the admin email test request payload.
+    """
     to: str
 
     @field_validator("to")
     @classmethod
     def validate_to(cls, value: str) -> str:
+        """
+        Validate To for the requested operation.
+        
+        Args:
+            value: Value processed by the helper.
+        
+        Returns:
+            Operation result represented as `str`.
+        
+        Raises:
+            ValueError: If the supplied values cannot be normalized or validated.
+        """
         try:
             validated = validate_email(value, check_deliverability=False)
         except EmailNotValidError as exc:
@@ -148,5 +190,8 @@ class AdminEmailTestRequest(BaseModel):
 
 
 class AdminEmailTestResponse(BaseModel):
+    """
+    Schema describing the admin email test response payload.
+    """
     success: bool = True
     message: str

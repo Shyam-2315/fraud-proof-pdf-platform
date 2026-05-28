@@ -9,14 +9,35 @@ from app.utils.security import generate_uuid, utc_now
 
 
 class IPIntelligenceService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         repository: IPIntelligenceRepository | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
         self.repository = repository or IPIntelligenceRepository()
 
     async def check_ip(self, ip_address: str | None) -> dict[str, Any]:
+        """
+        Check Ip for the requested operation.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         ip_address = (ip_address or "").strip()
         if not ip_address:
             return self._default_record("", "LOCAL_NONE")
@@ -31,6 +52,15 @@ class IPIntelligenceService:
         return await self.repository.upsert(self._default_record(ip_address, "LOCAL"))
 
     def _lookup_local_risk_list(self, ip_address: str) -> dict[str, Any] | None:
+        """
+        Lookup Local Risk List for the requested operation.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Operation result represented as `dict[str, Any] | None`.
+        """
         data = _load_local_risk_data(self.settings.IP_RISK_LIST_PATH)
         raw = data.get(ip_address) if isinstance(data, dict) else None
         if raw is None:
@@ -52,6 +82,16 @@ class IPIntelligenceService:
         }
 
     def _default_record(self, ip_address: str, provider: str) -> dict[str, Any]:
+        """
+        Default Record for the requested operation.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            provider: The provider value used by this operation.
+        
+        Returns:
+            Operation result represented as `dict[str, Any]`.
+        """
         record_id = generate_uuid()
         return {
             "_id": record_id,
@@ -72,6 +112,15 @@ class IPIntelligenceService:
 
 @lru_cache(maxsize=1)
 def _load_local_risk_data(configured_path: str) -> dict[str, Any]:
+    """
+    Load Local Risk Data for the requested operation.
+    
+    Args:
+        configured_path: The configured path value used by this operation.
+    
+    Returns:
+        Operation result represented as `dict[str, Any]`.
+    """
     path = Path(configured_path)
     if not path.is_absolute():
         path = Path(__file__).resolve().parents[2] / path

@@ -5,6 +5,9 @@ BEHAVIOR_EVENTS_COLLECTION = "behavior_events"
 
 
 class BehaviorEventType(StrEnum):
+    """
+    Model describing the behavior event type domain object.
+    """
     PAGE_VIEW = "PAGE_VIEW"
     PDF_TITLE_TYPED = "PDF_TITLE_TYPED"
     PDF_CONTENT_PASTED = "PDF_CONTENT_PASTED"

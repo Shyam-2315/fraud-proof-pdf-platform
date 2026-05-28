@@ -14,26 +14,74 @@ logger = logging.getLogger(__name__)
 
 
 class AnonymousUsageService:
+    """
+    Service that coordinates domain workflows and business rules.
+    """
     def __init__(
         self,
         repository: AnonymousIPUsageRepository | None = None,
     ) -> None:
+        """
+        Initialize the service with optional collaborators and runtime dependencies.
+        
+        Args:
+            repository: The repository value used by this operation.
+        
+        Returns:
+            None.
+        """
         self.settings = get_settings()
         self.repository = repository or AnonymousIPUsageRepository()
 
     def shared_ip_quota_enabled(self) -> bool:
+        """
+        Shared Ip Quota Enabled for the requested operation.
+        
+        Returns:
+            Operation result represented as `bool`.
+        """
         return bool(self.settings.ENABLE_SHARED_IP_ANON_QUOTA)
 
     def free_usage_limit(self) -> int:
+        """
+        Free Usage Limit for the requested operation.
+        
+        Returns:
+            Operation result represented as `int`.
+        """
         return int(self.settings.ANON_SHARED_IP_FREE_LIMIT)
 
     def _window_start(self):
+        """
+        Window Start for the requested operation.
+        
+        Returns:
+            Operation result for the requested workflow.
+        """
         return utc_now()
 
     def _window_end(self, start):
+        """
+        Window End for the requested operation.
+        
+        Args:
+            start: The start value used by this operation.
+        
+        Returns:
+            Operation result for the requested workflow.
+        """
         return start + timedelta(hours=int(self.settings.ANON_IP_USAGE_WINDOW_HOURS))
 
     async def get_ip_usage_count(self, ip_address: str | None) -> int:
+        """
+        Return ip usage count data for the service workflow.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Matching record or value when available.
+        """
         normalized_ip = normalize_ip(ip_address)
         if not normalized_ip or normalized_ip == "unknown":
             return 0
@@ -47,6 +95,19 @@ class AnonymousUsageService:
         fingerprint_hash: str | None = None,
         user_agent: str | None = None,
     ) -> dict[str, Any] | None:
+        """
+        Record anonymous pdf usage data for the service workflow.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+            visitor_id: Unique visitor identifier used by the operation.
+            anon_id: Unique anon identifier used by the operation.
+            fingerprint_hash: Device fingerprint hash associated with the caller.
+            user_agent: User-Agent string supplied by the client.
+        
+        Returns:
+            Outcome of the requested operation.
+        """
         normalized_ip = normalize_ip(ip_address)
         if not normalized_ip or normalized_ip == "unknown":
             return None
@@ -63,6 +124,15 @@ class AnonymousUsageService:
         )
 
     async def get_active_window(self, ip_address: str | None) -> dict[str, Any] | None:
+        """
+        Return active window data for the service workflow.
+        
+        Args:
+            ip_address: IP address being analyzed or persisted.
+        
+        Returns:
+            Matching record or value when available.
+        """
         normalized_ip = normalize_ip(ip_address)
         if not normalized_ip or normalized_ip == "unknown":
             return None
@@ -78,6 +148,17 @@ class AnonymousUsageService:
         ip_address: str | None,
         active_window: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Return shared usage snapshot data for the service workflow.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            ip_address: IP address being analyzed or persisted.
+            active_window: The active window value used by this operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         visitor_usage_count = int((visitor or {}).get("free_usage_count") or 0)
         free_usage_limit = self.free_usage_limit()
         normalized_ip = normalize_ip(ip_address)
@@ -110,6 +191,17 @@ class AnonymousUsageService:
         ip_address: str | None,
         active_window: dict[str, Any] | None = None,
     ) -> dict[str, int]:
+        """
+        Build shared usage summary data for the service workflow.
+        
+        Args:
+            visitor: Visitor record involved in the operation.
+            ip_address: IP address being analyzed or persisted.
+            active_window: The active window value used by this operation.
+        
+        Returns:
+            Constructed result for the requested operation.
+        """
         snapshot = await self.get_shared_usage_snapshot(
             visitor=visitor,
             ip_address=ip_address,
@@ -128,6 +220,17 @@ class AnonymousUsageService:
         visitor: dict[str, Any] | None,
         active_window: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        """
+        Return anonymous usage status data for the service workflow.
+        
+        Args:
+            request: Incoming FastAPI request used to inspect headers, cookies, and client metadata.
+            visitor: Visitor record involved in the operation.
+            active_window: The active window value used by this operation.
+        
+        Returns:
+            Matching record or value when available.
+        """
         normalized_ip = get_normalized_client_ip(request)
         snapshot = await self.get_shared_usage_snapshot(
             visitor=visitor,

@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 
 class FraudEventItem(BaseModel):
+    """
+    Schema describing the fraud event item payload.
+    """
     id: str
     visitor_id: str | None
     event_type: str
@@ -25,12 +28,18 @@ class FraudEventItem(BaseModel):
 
 
 class FraudEventListResponse(BaseModel):
+    """
+    Schema describing the fraud event list response payload.
+    """
     total: int
     limit: int
     items: list[FraudEventItem]
 
 
 class AdminFraudVisitorItem(BaseModel):
+    """
+    Schema describing the admin fraud visitor item payload.
+    """
     visitor_id: str
     free_usage_count: int
     free_usage_limit: int
@@ -49,12 +58,18 @@ class AdminFraudVisitorItem(BaseModel):
 
 
 class AdminFraudVisitorsResponse(BaseModel):
+    """
+    Schema describing the admin fraud visitors response payload.
+    """
     total: int
     limit: int
     items: list[AdminFraudVisitorItem]
 
 
 class AdminFraudSummaryResponse(BaseModel):
+    """
+    Schema describing the admin fraud summary response payload.
+    """
     total_visitors: int
     blocked_visitors: int
     total_generated_pdfs: int
@@ -75,6 +90,9 @@ class AdminFraudSummaryResponse(BaseModel):
 
 
 class AdminPDFItem(BaseModel):
+    """
+    Schema describing the admin pdf item payload.
+    """
     pdf_id: str
     visitor_id: str | None
     title: str
@@ -87,12 +105,18 @@ class AdminPDFItem(BaseModel):
 
 
 class AdminPDFListResponse(BaseModel):
+    """
+    Schema describing the admin pdf list response payload.
+    """
     total: int
     limit: int
     items: list[AdminPDFItem]
 
 
 class TimelineItem(BaseModel):
+    """
+    Schema describing the timeline item payload.
+    """
     id: str
     item_type: str
     title: str
@@ -101,6 +125,9 @@ class TimelineItem(BaseModel):
 
 
 class AdminVisitorInvestigationResponse(BaseModel):
+    """
+    Schema describing the admin visitor investigation response payload.
+    """
     visitor: dict[str, Any]
     generated_pdfs: list[AdminPDFItem]
     fraud_events: list[FraudEventItem]
@@ -118,12 +145,18 @@ class AdminVisitorInvestigationResponse(BaseModel):
 
 
 class FraudLabelRequest(BaseModel):
+    """
+    Schema describing the fraud label request payload.
+    """
     visitor_id: str
     label: int
     notes: str | None = None
 
 
 class MLTrainRequest(BaseModel):
+    """
+    Schema describing the ml train request payload.
+    """
     demo: bool = False
     synthetic_csv: str | None = None
     auto_activate: bool = False
@@ -132,6 +165,9 @@ class MLTrainRequest(BaseModel):
 
 
 class AdminAuditLogItem(BaseModel):
+    """
+    Schema describing the admin audit log item payload.
+    """
     id: str
     action: str
     target_type: str
@@ -141,6 +177,9 @@ class AdminAuditLogItem(BaseModel):
 
 
 class AdminAuditLogListResponse(BaseModel):
+    """
+    Schema describing the admin audit log list response payload.
+    """
     total: int
     limit: int
     items: list[AdminAuditLogItem]
