@@ -31,7 +31,7 @@ class BaseAppSettings(BaseSettings):
     )
     REDIS_URL: str = ""
 
-    CORS_ORIGINS: list[str] = Field(default_factory=list)
+    CORS_ORIGINS: str = ""
 
     JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
@@ -110,17 +110,30 @@ class BaseAppSettings(BaseSettings):
         extra="ignore",
     )
 
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Return CORS origins parsed from raw environment configuration."""
+        raw = self.CORS_ORIGINS
+        if not raw:
+            return []
+
+        raw = raw.strip().strip("'").strip('"')
+        if not raw:
+            return []
+
+        if raw.startswith("["):
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return [str(origin).strip() for origin in parsed if str(origin).strip()]
+
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: Any) -> list[str] | Any:
-        """Parse comma-separated or JSON CORS origins into a list."""
+    def normalize_cors_origins(cls, value: Any) -> Any:
+        """Preserve raw CORS origin input while trimming surrounding whitespace."""
         if isinstance(value, str):
-            stripped = value.strip()
-            if not stripped:
-                return []
-            if stripped.startswith("["):
-                return json.loads(stripped)
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            return value.strip()
         return value
 
     @field_validator(
@@ -224,7 +237,7 @@ class BaseAppSettings(BaseSettings):
             raise ValueError("ENABLE_DEFAULT_ADMIN_SEED must be false in production")
         if not self.SECURE_COOKIES:
             raise ValueError("SECURE_COOKIES must be true in production")
-        if "*" in self.CORS_ORIGINS:
+        if "*" in self.cors_origins_list:
             raise ValueError("Wildcard CORS origins are not allowed in production")
         for field_name in ("FRONTEND_URL", "ADMIN_FRONTEND_URL", "BACKEND_PUBLIC_URL"):
             if not getattr(self, field_name).startswith("https://"):

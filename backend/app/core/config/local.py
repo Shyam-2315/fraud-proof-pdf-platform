@@ -21,12 +21,12 @@ class LocalSettings(BaseAppSettings):
         validation_alias=AliasChoices("MONGODB_DB_NAME", "MONGO_DB_NAME"),
     )
     REDIS_URL: str = "redis://redis:6379/0"
-    CORS_ORIGINS: list[str] = [
-        "http://localhost:3025",
-        "http://127.0.0.1:3025",
-        "http://localhost:3035",
-        "http://127.0.0.1:3035",
-    ]
+    CORS_ORIGINS: str = (
+        "http://localhost:3025,"
+        "http://127.0.0.1:3025,"
+        "http://localhost:3035,"
+        "http://127.0.0.1:3035"
+    )
     JWT_SECRET_KEY: str = "change-me-super-secret"
     ADMIN_API_KEY: str = "change-me-admin-key"
     DEFAULT_ADMIN_EMAIL: str | None = "admin@pdfcraft.local"

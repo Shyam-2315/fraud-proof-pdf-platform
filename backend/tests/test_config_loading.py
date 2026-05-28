@@ -5,6 +5,23 @@ import pytest
 from app.config import DevSettings, LocalSettings, ProductionSettings, get_settings
 
 
+def _set_required_production_env(monkeypatch, cors_origins: str) -> None:
+    """Populate the minimum secure production environment for settings tests."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("FRONTEND_URL", "https://pdfcraft.example.com")
+    monkeypatch.setenv("ADMIN_FRONTEND_URL", "https://admin.pdfcraft.example.com")
+    monkeypatch.setenv("BACKEND_PUBLIC_URL", "https://api.pdfcraft.example.com")
+    monkeypatch.setenv("CORS_ORIGINS", cors_origins)
+    monkeypatch.setenv("MONGODB_URL", "mongodb://mongo.internal:27017")
+    monkeypatch.setenv("MONGODB_DB_NAME", "fraud_pdf")
+    monkeypatch.setenv("REDIS_URL", "redis://redis.internal:6379/0")
+    monkeypatch.setenv("JWT_SECRET_KEY", "prod-secret-value-that-is-long-enough")
+    monkeypatch.setenv("ADMIN_API_KEY", "prod-admin-key-that-is-long-enough")
+    monkeypatch.setenv("ENABLE_DEFAULT_ADMIN_SEED", "false")
+    monkeypatch.setenv("SECURE_COOKIES", "true")
+
+
+
 def _clear_backend_env(monkeypatch) -> None:
     """Remove backend environment variables that influence settings selection."""
     for key in (
@@ -42,6 +59,12 @@ def test_local_settings_use_safe_defaults(monkeypatch) -> None:
     assert settings.REDIS_URL == "redis://redis:6379/0"
     assert settings.JWT_SECRET_KEY == "change-me-super-secret"
     assert settings.ENABLE_DEFAULT_ADMIN_SEED is True
+    assert settings.cors_origins_list == [
+        "http://localhost:3025",
+        "http://127.0.0.1:3025",
+        "http://localhost:3035",
+        "http://127.0.0.1:3035",
+    ]
 
 
 def test_dev_settings_require_explicit_runtime_values(monkeypatch) -> None:
@@ -81,21 +104,10 @@ def test_production_settings_require_secure_values(monkeypatch) -> None:
 def test_production_settings_load_with_secure_values(monkeypatch) -> None:
     """Ensure production settings load when required secure values are present."""
     _clear_backend_env(monkeypatch)
-    monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.setenv("FRONTEND_URL", "https://pdfcraft.example.com")
-    monkeypatch.setenv("ADMIN_FRONTEND_URL", "https://admin.pdfcraft.example.com")
-    monkeypatch.setenv("BACKEND_PUBLIC_URL", "https://api.pdfcraft.example.com")
-    monkeypatch.setenv(
-        "CORS_ORIGINS",
+    _set_required_production_env(
+        monkeypatch,
         '["https://pdfcraft.example.com","https://admin.pdfcraft.example.com"]',
     )
-    monkeypatch.setenv("MONGODB_URL", "mongodb://mongo.internal:27017")
-    monkeypatch.setenv("MONGODB_DB_NAME", "fraud_pdf")
-    monkeypatch.setenv("REDIS_URL", "redis://redis.internal:6379/0")
-    monkeypatch.setenv("JWT_SECRET_KEY", "prod-secret-value-that-is-long-enough")
-    monkeypatch.setenv("ADMIN_API_KEY", "prod-admin-key-that-is-long-enough")
-    monkeypatch.setenv("ENABLE_DEFAULT_ADMIN_SEED", "false")
-    monkeypatch.setenv("SECURE_COOKIES", "true")
     get_settings.cache_clear()
 
     settings = get_settings()
@@ -104,6 +116,52 @@ def test_production_settings_load_with_secure_values(monkeypatch) -> None:
     assert settings.APP_ENV == "production"
     assert settings.ENABLE_API_DOCS is False
     assert settings.SECURE_COOKIES is True
+    assert settings.cors_origins_list == [
+        "https://pdfcraft.example.com",
+        "https://admin.pdfcraft.example.com",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        (
+            "https://pdfcraft-customer.vercel.app,https://temp-admin.vercel.app",
+            [
+                "https://pdfcraft-customer.vercel.app",
+                "https://temp-admin.vercel.app",
+            ],
+        ),
+        (
+            '["https://pdfcraft-customer.vercel.app","https://temp-admin.vercel.app"]',
+            [
+                "https://pdfcraft-customer.vercel.app",
+                "https://temp-admin.vercel.app",
+            ],
+        ),
+        (
+            '\'["https://pdfcraft-customer.vercel.app","https://temp-admin.vercel.app"]\'',
+            [
+                "https://pdfcraft-customer.vercel.app",
+                "https://temp-admin.vercel.app",
+            ],
+        ),
+    ],
+)
+def test_cors_origins_parsing_supports_render_formats(
+    monkeypatch,
+    raw_value: str,
+    expected: list[str],
+) -> None:
+    """Ensure Render-style CORS origin env formats load without settings crashes."""
+    _clear_backend_env(monkeypatch)
+    _set_required_production_env(monkeypatch, raw_value)
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.CORS_ORIGINS == raw_value
+    assert settings.cors_origins_list == expected
 
 
 def test_development_alias_maps_to_dev_settings(monkeypatch) -> None:
