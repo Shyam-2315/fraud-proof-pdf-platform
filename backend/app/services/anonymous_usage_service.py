@@ -325,12 +325,18 @@ class AnonymousUsageService:
         remaining: int,
     ) -> dict[str, bool | str | None]:
         """Classify anonymous visitor blocking into limit and explicit-fraud buckets."""
-        block_reason = str((visitor or {}).get("block_reason") or "").strip() or None
+        stored_block_reason = str((visitor or {}).get("block_reason") or "").strip() or None
         visitor_blocked = bool((visitor or {}).get("is_blocked", False))
-        stored_fraud_blocked = bool((visitor or {}).get("fraud_blocked", False))
         limit_reached = remaining <= 0
-        fraud_blocked = stored_fraud_blocked or (
-            visitor_blocked and block_reason not in {None, _LIMIT_BLOCK_REASON}
+        # Legacy visitor records may still carry raw block flags from old free-limit logic.
+        # Treat only explicit non-limit reasons as fraud/manual blocks.
+        fraud_blocked = stored_block_reason not in {None, _LIMIT_BLOCK_REASON}
+        block_reason = (
+            _LIMIT_BLOCK_REASON
+            if limit_reached
+            else stored_block_reason
+            if fraud_blocked
+            else None
         )
         return {
             "limit_reached": limit_reached,

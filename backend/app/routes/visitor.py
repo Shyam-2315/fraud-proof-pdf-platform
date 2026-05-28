@@ -108,12 +108,12 @@ async def visitor_status(request: Request) -> VisitorStatusResponse:
             "free_usage_count": int(usage_status["free_usage_count"]),
             "free_usage_limit": int(usage_status["free_usage_limit"]),
             "remaining_free_uses": int(usage_status["remaining_free_uses"]),
+            "limit_reached": bool(usage_status["limit_reached"]),
+            "fraud_blocked": bool(usage_status["fraud_blocked"]),
             "is_blocked": bool(usage_status["is_blocked"]),
             "message": usage_status["message"],
             "requires_login": bool(usage_status["requires_login"]),
         }
-        if usage_status["fraud_blocked"]:
-            response_data["fraud_blocked"] = True
         return VisitorStatusResponse(
             **response_data,
         )

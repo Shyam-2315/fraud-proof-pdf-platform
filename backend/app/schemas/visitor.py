@@ -66,7 +66,8 @@ class VisitorStatusResponse(BaseModel):
     free_usage_count: int
     free_usage_limit: int
     remaining_free_uses: int
+    limit_reached: bool = False
+    fraud_blocked: bool = False
     is_blocked: bool
     message: str | None = None
     requires_login: bool = False
-    fraud_blocked: bool | None = None
