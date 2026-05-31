@@ -32,6 +32,7 @@ def _patch_lifespan_dependencies(monkeypatch, module) -> None:
         "ensure_behavior_indexes",
         "ensure_fraud_engine_indexes",
         "ensure_admin_audit_indexes",
+        "ensure_request_log_indexes",
         "seed_default_admin",
     ):
         monkeypatch.setattr(module, name, _noop)

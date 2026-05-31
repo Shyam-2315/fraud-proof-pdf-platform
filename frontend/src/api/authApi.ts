@@ -69,10 +69,13 @@ export function resendVerification(payload: { email: string }) {
 export type AccountUsage = {
   plan: string;
   month_key: string;
+  billing_period_start: string;
+  billing_period_end: string;
   used: number;
   limit: number;
   remaining: number;
   requires_upgrade: boolean;
+  plan_limits: Record<string, number>;
 };
 
 export function getAccountUsage() {

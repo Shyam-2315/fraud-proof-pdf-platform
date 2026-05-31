@@ -12,9 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminVisitorsRouteImport } from './routes/admin.visitors'
+import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminPdfsRouteImport } from './routes/admin.pdfs'
+import { Route as AdminMonitoringRouteImport } from './routes/admin.monitoring'
 import { Route as AdminMlRouteImport } from './routes/admin.ml'
+import { Route as AdminLogsRouteImport } from './routes/admin.logs'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
+import { Route as AdminFraudDecisionsRouteImport } from './routes/admin.fraud-decisions'
 import { Route as AdminEventsRouteImport } from './routes/admin.events'
 import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 import { Route as AdminAuditLogsRouteImport } from './routes/admin.audit-logs'
@@ -36,9 +40,19 @@ const AdminVisitorsRoute = AdminVisitorsRouteImport.update({
   path: '/visitors',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminUsersRoute = AdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminPdfsRoute = AdminPdfsRouteImport.update({
   id: '/pdfs',
   path: '/pdfs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminMonitoringRoute = AdminMonitoringRouteImport.update({
+  id: '/monitoring',
+  path: '/monitoring',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminMlRoute = AdminMlRouteImport.update({
@@ -46,9 +60,19 @@ const AdminMlRoute = AdminMlRouteImport.update({
   path: '/ml',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminLogsRoute = AdminLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminLoginRoute = AdminLoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminFraudDecisionsRoute = AdminFraudDecisionsRouteImport.update({
+  id: '/fraud-decisions',
+  path: '/fraud-decisions',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminEventsRoute = AdminEventsRouteImport.update({
@@ -83,9 +107,13 @@ export interface FileRoutesByFullPath {
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
+  '/admin/fraud-decisions': typeof AdminFraudDecisionsRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/admin/ml': typeof AdminMlRouteWithChildren
+  '/admin/monitoring': typeof AdminMonitoringRoute
   '/admin/pdfs': typeof AdminPdfsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/admin/visitors': typeof AdminVisitorsRoute
   '/admin/ml/models': typeof AdminMlModelsRoute
   '/admin/visitor/$visitorId': typeof AdminVisitorVisitorIdRoute
@@ -96,9 +124,13 @@ export interface FileRoutesByTo {
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
+  '/admin/fraud-decisions': typeof AdminFraudDecisionsRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/admin/ml': typeof AdminMlRouteWithChildren
+  '/admin/monitoring': typeof AdminMonitoringRoute
   '/admin/pdfs': typeof AdminPdfsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/admin/visitors': typeof AdminVisitorsRoute
   '/admin/ml/models': typeof AdminMlModelsRoute
   '/admin/visitor/$visitorId': typeof AdminVisitorVisitorIdRoute
@@ -110,9 +142,13 @@ export interface FileRoutesById {
   '/admin/audit-logs': typeof AdminAuditLogsRoute
   '/admin/dashboard': typeof AdminDashboardRoute
   '/admin/events': typeof AdminEventsRoute
+  '/admin/fraud-decisions': typeof AdminFraudDecisionsRoute
   '/admin/login': typeof AdminLoginRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/admin/ml': typeof AdminMlRouteWithChildren
+  '/admin/monitoring': typeof AdminMonitoringRoute
   '/admin/pdfs': typeof AdminPdfsRoute
+  '/admin/users': typeof AdminUsersRoute
   '/admin/visitors': typeof AdminVisitorsRoute
   '/admin/ml/models': typeof AdminMlModelsRoute
   '/admin/visitor/$visitorId': typeof AdminVisitorVisitorIdRoute
@@ -125,9 +161,13 @@ export interface FileRouteTypes {
     | '/admin/audit-logs'
     | '/admin/dashboard'
     | '/admin/events'
+    | '/admin/fraud-decisions'
     | '/admin/login'
+    | '/admin/logs'
     | '/admin/ml'
+    | '/admin/monitoring'
     | '/admin/pdfs'
+    | '/admin/users'
     | '/admin/visitors'
     | '/admin/ml/models'
     | '/admin/visitor/$visitorId'
@@ -138,9 +178,13 @@ export interface FileRouteTypes {
     | '/admin/audit-logs'
     | '/admin/dashboard'
     | '/admin/events'
+    | '/admin/fraud-decisions'
     | '/admin/login'
+    | '/admin/logs'
     | '/admin/ml'
+    | '/admin/monitoring'
     | '/admin/pdfs'
+    | '/admin/users'
     | '/admin/visitors'
     | '/admin/ml/models'
     | '/admin/visitor/$visitorId'
@@ -151,9 +195,13 @@ export interface FileRouteTypes {
     | '/admin/audit-logs'
     | '/admin/dashboard'
     | '/admin/events'
+    | '/admin/fraud-decisions'
     | '/admin/login'
+    | '/admin/logs'
     | '/admin/ml'
+    | '/admin/monitoring'
     | '/admin/pdfs'
+    | '/admin/users'
     | '/admin/visitors'
     | '/admin/ml/models'
     | '/admin/visitor/$visitorId'
@@ -187,11 +235,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminVisitorsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/users': {
+      id: '/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AdminUsersRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/pdfs': {
       id: '/admin/pdfs'
       path: '/pdfs'
       fullPath: '/admin/pdfs'
       preLoaderRoute: typeof AdminPdfsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/monitoring': {
+      id: '/admin/monitoring'
+      path: '/monitoring'
+      fullPath: '/admin/monitoring'
+      preLoaderRoute: typeof AdminMonitoringRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/ml': {
@@ -201,11 +263,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminMlRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/logs': {
+      id: '/admin/logs'
+      path: '/logs'
+      fullPath: '/admin/logs'
+      preLoaderRoute: typeof AdminLogsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/login': {
       id: '/admin/login'
       path: '/login'
       fullPath: '/admin/login'
       preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/fraud-decisions': {
+      id: '/admin/fraud-decisions'
+      path: '/fraud-decisions'
+      fullPath: '/admin/fraud-decisions'
+      preLoaderRoute: typeof AdminFraudDecisionsRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/events': {
@@ -261,9 +337,13 @@ interface AdminRouteChildren {
   AdminAuditLogsRoute: typeof AdminAuditLogsRoute
   AdminDashboardRoute: typeof AdminDashboardRoute
   AdminEventsRoute: typeof AdminEventsRoute
+  AdminFraudDecisionsRoute: typeof AdminFraudDecisionsRoute
   AdminLoginRoute: typeof AdminLoginRoute
+  AdminLogsRoute: typeof AdminLogsRoute
   AdminMlRoute: typeof AdminMlRouteWithChildren
+  AdminMonitoringRoute: typeof AdminMonitoringRoute
   AdminPdfsRoute: typeof AdminPdfsRoute
+  AdminUsersRoute: typeof AdminUsersRoute
   AdminVisitorsRoute: typeof AdminVisitorsRoute
   AdminVisitorVisitorIdRoute: typeof AdminVisitorVisitorIdRoute
 }
@@ -272,9 +352,13 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminAuditLogsRoute: AdminAuditLogsRoute,
   AdminDashboardRoute: AdminDashboardRoute,
   AdminEventsRoute: AdminEventsRoute,
+  AdminFraudDecisionsRoute: AdminFraudDecisionsRoute,
   AdminLoginRoute: AdminLoginRoute,
+  AdminLogsRoute: AdminLogsRoute,
   AdminMlRoute: AdminMlRouteWithChildren,
+  AdminMonitoringRoute: AdminMonitoringRoute,
   AdminPdfsRoute: AdminPdfsRoute,
+  AdminUsersRoute: AdminUsersRoute,
   AdminVisitorsRoute: AdminVisitorsRoute,
   AdminVisitorVisitorIdRoute: AdminVisitorVisitorIdRoute,
 }

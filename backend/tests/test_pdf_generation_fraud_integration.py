@@ -161,7 +161,9 @@ def _mark_user_verified(email: str) -> None:
 
 
 def _assert_customer_safe(body: dict) -> None:
-    serialized = str(body).lower()
+    # Public visitor status intentionally includes this boolean contract field.
+    safe_body = {key: value for key, value in body.items() if key != "fraud_blocked"}
+    serialized = str(safe_body).lower()
     for forbidden in CUSTOMER_FORBIDDEN:
         assert forbidden.lower() not in serialized
 

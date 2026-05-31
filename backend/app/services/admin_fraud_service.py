@@ -14,6 +14,10 @@ from app.repositories.pdf_repository import PDFRepository
 from app.repositories.risk_repository import IPIntelligenceRepository, RiskScoreSnapshotRepository
 from app.repositories.user_repository import UserRepository
 from app.repositories.visitor_repository import VisitorRepository
+from app.schemas.admin_monitoring import (
+    AdminFraudDecisionItem,
+    AdminFraudDecisionListResponse,
+)
 from app.schemas.fraud_event import (
     AdminFraudSummaryResponse,
     AdminFraudVisitorItem,
@@ -310,6 +314,83 @@ class AdminFraudService:
             "items": [_sanitize_mongo_doc(item) for item in items],
         }
 
+    async def get_fraud_decisions(
+        self,
+        limit: int,
+        offset: int = 0,
+        visitor_id: str | None = None,
+        action_type: str | None = None,
+        decision: str | None = None,
+        risk_level: str | None = None,
+        user_id: str | None = None,
+        search: str | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+    ) -> AdminFraudDecisionListResponse:
+        """
+        Return stored fraud engine decisions enriched with safe visitor context.
+
+        Args:
+            limit: Maximum number of decisions to return.
+            offset: Number of matching decisions to skip.
+            visitor_id: Optional visitor filter.
+            action_type: Optional decision action filter.
+            decision: Optional decision filter.
+            risk_level: Optional risk-level filter.
+            user_id: Optional user filter.
+            search: Optional visitor/user/action substring filter.
+            created_from: Optional created-at lower bound.
+            created_to: Optional created-at upper bound.
+
+        Returns:
+            Paginated fraud decision response for admin review.
+        """
+        total = await self.fraud_engine_repository.count_decisions(
+            visitor_id=visitor_id,
+            action_type=action_type,
+            decision=decision,
+            risk_level=risk_level,
+            user_id=user_id,
+            search=search,
+            created_from=created_from,
+            created_to=created_to,
+        )
+        decisions = await self.fraud_engine_repository.list_decisions(
+            limit=limit,
+            offset=offset,
+            visitor_id=visitor_id,
+            action_type=action_type,
+            decision=decision,
+            risk_level=risk_level,
+            user_id=user_id,
+            search=search,
+            created_from=created_from,
+            created_to=created_to,
+        )
+        visitor_ids = sorted(
+            {
+                str(item.get("visitor_id"))
+                for item in decisions
+                if item.get("visitor_id")
+            }
+        )
+        visitors = {
+            str(visitor.get("_id")): visitor
+            for visitor in await self.visitor_repository.list_by_ids(visitor_ids)
+        }
+        return AdminFraudDecisionListResponse(
+            total=total,
+            limit=limit,
+            offset=offset,
+            items=[
+                _build_fraud_decision_item(
+                    decision_record=item,
+                    visitor=visitors.get(str(item.get("visitor_id"))),
+                )
+                for item in decisions
+            ],
+        )
+
     async def get_ip_usage_detail(self, ip_address: str) -> dict[str, Any]:
         """
         Return ip usage detail data for the service workflow.
@@ -390,6 +471,36 @@ def _build_admin_pdf_item(pdf: dict[str, Any]) -> AdminPDFItem:
     )
 
 
+def _build_fraud_decision_item(
+    decision_record: dict[str, Any],
+    visitor: dict[str, Any] | None = None,
+) -> AdminFraudDecisionItem:
+    """
+    Build an admin-safe fraud decision row.
+
+    Args:
+        decision_record: Stored fraud decision document.
+        visitor: Optional visitor document used to enrich IP/fingerprint context.
+
+    Returns:
+        Fraud decision item for API responses.
+    """
+    risk_score = decision_record.get("final_risk_score", decision_record.get("risk_score", 0))
+    return AdminFraudDecisionItem(
+        id=str(decision_record.get("id") or decision_record.get("_id") or ""),
+        visitor_id=decision_record.get("visitor_id"),
+        user_id=decision_record.get("user_id"),
+        ip_address=_last_or_none((visitor or {}).get("ip_addresses", [])),
+        fingerprint_hash=(visitor or {}).get("primary_fingerprint_hash"),
+        risk_score=float(risk_score or 0),
+        risk_level=str(decision_record.get("risk_level", "LOW")),
+        decision=str(decision_record.get("decision", "")),
+        action_type=decision_record.get("action_type"),
+        reason=_decision_reason_text(decision_record.get("reasons")),
+        created_at=_datetime_or_now(decision_record.get("created_at")),
+    )
+
+
 def _sanitize_visitor(visitor: dict[str, Any]) -> dict[str, Any]:
     """
     Sanitize Visitor for the requested operation.
@@ -450,6 +561,24 @@ def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
         "created_at": _datetime_or_now(user.get("created_at")),
         "last_login_at": user.get("last_login_at"),
     }
+
+
+def _decision_reason_text(reasons: Any) -> str | None:
+    if not reasons:
+        return None
+    if isinstance(reasons, list):
+        parts = []
+        for reason in reasons:
+            if isinstance(reason, dict):
+                parts.append(str(reason.get("message") or reason.get("reason") or reason))
+            else:
+                parts.append(str(reason))
+        return "; ".join(part for part in parts if part)
+    return str(reasons)
+
+
+def _last_or_none(values: list[Any]) -> Any:
+    return values[-1] if values else None
 
 
 def _sanitize_mongo_doc(item: dict[str, Any]) -> dict[str, Any]:

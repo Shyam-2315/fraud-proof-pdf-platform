@@ -1,4 +1,6 @@
 import logging
+import re
+from datetime import datetime
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -312,45 +314,97 @@ class FraudEngineRepository:
     async def list_decisions(
         self,
         limit: int = 100,
+        offset: int = 0,
         visitor_id: str | None = None,
         action_type: str | None = None,
+        decision: str | None = None,
+        risk_level: str | None = None,
+        user_id: str | None = None,
+        search: str | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
     ) -> list[dict[str, Any]]:
         """
         List decisions records that match the requested filters.
         
         Args:
             limit: Maximum number of records or results to return.
+            offset: Number of matching rows to skip.
             visitor_id: Unique visitor identifier used by the operation.
             action_type: The action type value used by this operation.
+            decision: Optional decision filter.
+            risk_level: Optional risk-level filter.
+            user_id: Optional user identifier filter.
+            search: Optional visitor/user/action substring filter.
+            created_from: Optional inclusive created-at lower bound.
+            created_to: Optional exclusive created-at upper bound.
         
         Returns:
             List of matching records.
         """
-        query: dict[str, Any] = {}
-        if visitor_id:
-            query["visitor_id"] = visitor_id
-        if action_type:
-            query["action_type"] = action_type
+        query = _build_decision_query(
+            visitor_id=visitor_id,
+            action_type=action_type,
+            decision=decision,
+            risk_level=risk_level,
+            user_id=user_id,
+            search=search,
+            created_from=created_from,
+            created_to=created_to,
+        )
         cursor = (
             self.collection(FRAUD_DECISIONS_COLLECTION)
             .find(query)
             .sort("created_at", DESCENDING)
+            .skip(offset)
             .limit(limit)
         )
         return await cursor.to_list(length=limit)
 
-    async def count_decisions(self, filter_query: dict[str, Any] | None = None) -> int:
+    async def count_decisions(
+        self,
+        filter_query: dict[str, Any] | None = None,
+        visitor_id: str | None = None,
+        action_type: str | None = None,
+        decision: str | None = None,
+        risk_level: str | None = None,
+        user_id: str | None = None,
+        search: str | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+    ) -> int:
         """
         Count decisions records that match the requested filters.
         
         Args:
             filter_query: MongoDB filter document applied to the query.
+            visitor_id: Optional visitor identifier filter.
+            action_type: Optional action-type filter.
+            decision: Optional decision filter.
+            risk_level: Optional risk-level filter.
+            user_id: Optional user identifier filter.
+            search: Optional visitor/user/action substring filter.
+            created_from: Optional inclusive created-at lower bound.
+            created_to: Optional exclusive created-at upper bound.
         
         Returns:
             Total number of matching records.
         """
+        query = dict(filter_query or {})
+        query.update(
+            _build_decision_query(
+                visitor_id=visitor_id,
+                action_type=action_type,
+                decision=decision,
+                risk_level=risk_level,
+                user_id=user_id,
+                search=search,
+                created_from=created_from,
+                created_to=created_to,
+            )
+        )
         return await self.collection(FRAUD_DECISIONS_COLLECTION).count_documents(
-            filter_query or {}
+            query
         )
 
 
@@ -389,5 +443,46 @@ async def ensure_fraud_engine_indexes() -> None:
     await decisions.create_index([("action_type", ASCENDING)], name="idx_fraud_decisions_action")
     await decisions.create_index([("decision", ASCENDING)], name="idx_fraud_decisions_decision")
     await decisions.create_index([("risk_level", ASCENDING)], name="idx_fraud_decisions_risk")
+    await decisions.create_index([("user_id", ASCENDING)], name="idx_fraud_decisions_user")
     await decisions.create_index([("created_at", DESCENDING)], name="idx_fraud_decisions_created")
     logger.info("Ensured fraud engine collection indexes")
+
+
+def _build_decision_query(
+    visitor_id: str | None = None,
+    action_type: str | None = None,
+    decision: str | None = None,
+    risk_level: str | None = None,
+    user_id: str | None = None,
+    search: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+) -> dict[str, Any]:
+    query: dict[str, Any] = {}
+    if visitor_id:
+        query["visitor_id"] = visitor_id
+    if action_type:
+        query["action_type"] = action_type
+    if decision:
+        query["decision"] = decision
+    if risk_level:
+        query["risk_level"] = risk_level
+    if user_id:
+        query["user_id"] = user_id
+    if created_from or created_to:
+        created_at: dict[str, Any] = {}
+        if created_from:
+            created_at["$gte"] = created_from
+        if created_to:
+            created_at["$lte"] = created_to
+        query["created_at"] = created_at
+    if search:
+        search_regex = {"$regex": re.escape(search), "$options": "i"}
+        query["$or"] = [
+            {"visitor_id": search_regex},
+            {"user_id": search_regex},
+            {"action_type": search_regex},
+            {"decision": search_regex},
+            {"risk_level": search_regex},
+        ]
+    return query

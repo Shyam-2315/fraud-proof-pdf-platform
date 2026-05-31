@@ -96,3 +96,20 @@ def test_frontend_exposes_verify_email_route_and_api_calls() -> None:
     assert 'path="/verify-email"' in app_source
     assert '/verify-email?email=${encodeURIComponent(response.email)}' in signup_source
     assert "setCooldown(60);" in verify_source
+
+
+def test_account_usage_contract_includes_billing_period_and_plan_limits() -> None:
+    _require_frontend_source()
+    auth_api_source = (FRONTEND_SRC / "api" / "authApi.ts").read_text(encoding="utf-8")
+    account_card_source = (
+        FRONTEND_SRC / "components" / "AccountUsageCard.tsx"
+    ).read_text(encoding="utf-8")
+    pricing_source = (FRONTEND_SRC / "pages" / "PricingPage.tsx").read_text(encoding="utf-8")
+
+    assert "billing_period_start: string;" in auth_api_source
+    assert "billing_period_end: string;" in auth_api_source
+    assert "plan_limits: Record<string, number>;" in auth_api_source
+    assert "formatDate(usage.billing_period_start)" in account_card_source
+    assert "formatDate(usage.billing_period_end)" in account_card_source
+    assert "usage.requires_upgrade" in account_card_source
+    assert "placeholder" in pricing_source.lower()

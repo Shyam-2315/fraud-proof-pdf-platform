@@ -26,4 +26,12 @@ def test_v1_and_legacy_routes_are_both_registered(monkeypatch) -> None:
     assert "/api/account/usage" in paths
     assert "/api/v1/admin/fraud/summary" in paths
     assert "/api/admin/fraud/summary" in paths
+    assert "/api/v1/admin/monitoring" in paths
+    assert "/api/admin/monitoring" in paths
+    assert "/api/v1/admin/logs" in paths
+    assert "/api/admin/logs" in paths
+    assert "/api/v1/admin/users" in paths
+    assert "/api/admin/users" in paths
+    assert "/api/v1/admin/users/{user_id}/block" in paths
+    assert "/api/admin/users/{user_id}/block" in paths
     assert "/health" in paths

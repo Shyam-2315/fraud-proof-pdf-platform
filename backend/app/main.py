@@ -24,6 +24,7 @@ from app.repositories.fraud_repository import ensure_fraud_indexes
 from app.repositories.identity_repository import ensure_identity_link_indexes
 from app.repositories.pdf_repository import ensure_pdf_indexes
 from app.repositories.refresh_token_repository import ensure_refresh_token_indexes
+from app.repositories.request_log_repository import ensure_request_log_indexes
 from app.repositories.risk_repository import ensure_risk_indexes
 from app.repositories.user_repository import ensure_user_indexes, seed_default_admin
 from app.repositories.user_usage_repository import ensure_user_usage_indexes
@@ -70,6 +71,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await ensure_behavior_indexes()
         await ensure_fraud_engine_indexes()
         await ensure_admin_audit_indexes()
+        await ensure_request_log_indexes()
         await seed_default_admin()
         await connect_to_redis()
         yield

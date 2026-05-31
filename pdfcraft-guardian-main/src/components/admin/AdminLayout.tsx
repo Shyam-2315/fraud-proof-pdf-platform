@@ -19,8 +19,12 @@ import { Toaster } from "@/components/ui/sonner";
 
 const NAV = [
   { to: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/admin/monitoring", label: "Monitoring", icon: LayoutDashboard },
+  { to: "/admin/logs", label: "Request Logs", icon: ClipboardList },
   { to: "/admin/events", label: "Fraud Events", icon: ShieldAlert },
+  { to: "/admin/fraud-decisions", label: "Decisions", icon: ShieldAlert },
   { to: "/admin/visitors", label: "Visitors", icon: Users },
+  { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/pdfs", label: "All PDFs", icon: FileText },
   { to: "/admin/ml", label: "ML Engine", icon: Brain },
   { to: "/admin/ml/models", label: "Model Versions", icon: GitBranch },
@@ -29,8 +33,12 @@ const NAV = [
 
 const PAGE_TITLES: Record<string, string> = {
   "/admin/dashboard": "Dashboard",
+  "/admin/monitoring": "Monitoring",
+  "/admin/logs": "Request Logs",
   "/admin/events": "Fraud Events",
+  "/admin/fraud-decisions": "Fraud Decisions",
   "/admin/visitors": "Visitors",
+  "/admin/users": "Users",
   "/admin/pdfs": "All PDFs",
   "/admin/ml": "ML Engine",
   "/admin/ml/models": "Model Versions",
@@ -45,7 +53,7 @@ export function AdminProtectedLayout() {
 
   useEffect(() => {
     if (!isAdminAuthenticated()) {
-      navigate({ to: "/admin/login" });
+      navigate({ to: "/admin/login", search: { reason: undefined } });
     } else {
       setAuthChecked(true);
     }
@@ -61,7 +69,7 @@ export function AdminProtectedLayout() {
 
   const handleLogout = () => {
     clearAdminAuth();
-    navigate({ to: "/admin/login" });
+    navigate({ to: "/admin/login", search: { reason: undefined } });
   };
 
   const title =

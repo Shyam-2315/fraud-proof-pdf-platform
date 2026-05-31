@@ -6,9 +6,11 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from app.repositories.request_log_repository import RequestLogRepository
 from app.utils.request_utils import get_client_ip
 
 logger = logging.getLogger("app.request")
+request_log_repository = RequestLogRepository()
 
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
@@ -88,6 +90,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 client_ip,
                 request_id,
             )
+            await _store_api_request_log(
+                request=request,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                client_ip=client_ip,
+                request_id=request_id,
+            )
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -117,3 +126,45 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "camera=(), microphone=(), geolocation=(), payment=()"
         )
         return response
+
+
+async def _store_api_request_log(
+    request: Request,
+    status_code: int,
+    duration_ms: float,
+    client_ip: str,
+    request_id: str,
+) -> None:
+    """
+    Persist sanitized API request metadata for admin observability.
+
+    Args:
+        request: Incoming request whose metadata should be recorded.
+        status_code: Final response status code.
+        duration_ms: Request duration in milliseconds.
+        client_ip: Normalized client IP value used by runtime logs.
+        request_id: Request correlation identifier.
+    """
+    path = request.url.path
+    if not path.startswith("/api"):
+        return
+    try:
+        await request_log_repository.create_log(
+            {
+                "request_id": request_id,
+                "method": request.method,
+                "path": path,
+                "status_code": status_code,
+                "duration_ms": duration_ms,
+                "client_ip": client_ip,
+                "block_reason": getattr(request.state, "block_reason", None),
+                "fraud_score": getattr(request.state, "fraud_score", None),
+            }
+        )
+    except Exception as exc:
+        logger.warning(
+            "Failed to persist request log request_id=%s path=%s error=%s",
+            request_id,
+            path,
+            exc,
+        )

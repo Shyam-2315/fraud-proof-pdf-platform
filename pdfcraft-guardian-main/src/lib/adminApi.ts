@@ -7,4 +7,13 @@ export {
   isAdminAuthenticated,
 } from "@/api/client";
 export { adminApi } from "@/api/adminApi";
+export type {
+  AdminFraudDecisionItem,
+  AdminFraudDecisionListResponse,
+  AdminMonitoringResponse,
+  AdminRequestLogItem,
+  AdminRequestLogListResponse,
+  AdminUserManagementItem,
+  AdminUserManagementListResponse,
+} from "@/api/adminApi";
 export { authApi } from "@/api/authApi";

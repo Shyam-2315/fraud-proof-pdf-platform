@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -5,6 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from app.core.admin_auth import require_admin_api_key
 from app.config import get_settings
 from app.models.fraud_event import AdminAuditAction
+from app.schemas.admin_monitoring import (
+    AdminFraudDecisionListResponse,
+    AdminMonitoringResponse,
+    AdminRequestLogListResponse,
+    AdminUserActionResponse,
+    AdminUserManagementListResponse,
+)
 from app.schemas.fraud_event import (
     AdminAuditLogItem,
     AdminAuditLogListResponse,
@@ -18,6 +26,7 @@ from app.schemas.fraud_event import (
 )
 from app.services.admin_audit_service import AdminAuditService
 from app.services.admin_fraud_service import AdminFraudService
+from app.services.admin_monitoring_service import AdminMonitoringService
 from app.models.fraud_event import FraudEventType, FraudSeverity
 from app.repositories.fraud_engine_repository import FraudEngineRepository
 from app.services.fraud_event_service import FraudEventService
@@ -29,6 +38,7 @@ router = APIRouter(
     dependencies=[Depends(require_admin_api_key)],
 )
 admin_fraud_service = AdminFraudService()
+admin_monitoring_service = AdminMonitoringService()
 admin_audit_service = AdminAuditService()
 fraud_engine_repository = FraudEngineRepository()
 fraud_event_service = FraudEventService()
@@ -36,6 +46,7 @@ settings = get_settings()
 rate_limit_service = RateLimitService()
 
 SeverityParam = Literal["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+DecisionParam = Literal["ALLOW", "ALLOW_LOG", "REQUIRE_LOGIN", "BLOCK"]
 
 
 def _get_model_registry():
@@ -61,6 +72,186 @@ def _get_training_service():
 
     registry = _get_model_registry()
     return TrainingService(repository=fraud_engine_repository, registry=registry)
+
+
+@router.get(
+    "/monitoring",
+    response_model=AdminMonitoringResponse,
+    tags=["Admin Monitoring"],
+)
+async def admin_monitoring(request: Request) -> AdminMonitoringResponse:
+    """
+    Return production monitoring metrics and dependency readiness for admins.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+
+    Returns:
+        Core business counts and dependency health details.
+    """
+    await _enforce_admin_rate_limit(request)
+    response = await admin_monitoring_service.get_monitoring()
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_MONITORING.value,
+        target_type="monitoring",
+    )
+    return response
+
+
+@router.get(
+    "/logs",
+    response_model=AdminRequestLogListResponse,
+    tags=["Admin Monitoring"],
+)
+async def admin_request_logs(
+    request: Request,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    method: str | None = None,
+    status_code: int | None = Query(default=None, ge=100, le=599),
+    path: str | None = None,
+) -> AdminRequestLogListResponse:
+    """
+    Return sanitized API request logs for admin observability.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of logs to return.
+        offset: Number of matching logs to skip.
+        method: Optional HTTP method filter.
+        status_code: Optional status-code filter.
+        path: Optional path substring filter.
+
+    Returns:
+        Paginated request-log response.
+    """
+    await _enforce_admin_rate_limit(request)
+    response = await admin_monitoring_service.get_request_logs(
+        limit=limit,
+        offset=offset,
+        method=method,
+        status_code=status_code,
+        path=path,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_REQUEST_LOGS.value,
+        target_type="request_logs",
+        metadata={
+            "limit": limit,
+            "offset": offset,
+            "method": method,
+            "status_code": status_code,
+            "path": path,
+        },
+    )
+    return response
+
+
+@router.get(
+    "/users",
+    response_model=AdminUserManagementListResponse,
+    tags=["Admin Users"],
+)
+async def admin_users(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    search: str | None = None,
+    plan: str | None = None,
+    is_active: bool | None = None,
+) -> AdminUserManagementListResponse:
+    """
+    Return admin-safe user records with plan and current-period usage.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        limit: Maximum number of users to return.
+        offset: Number of matching users to skip.
+        search: Optional email/name filter.
+        plan: Optional plan filter.
+        is_active: Optional active/blocked filter.
+
+    Returns:
+        Paginated user management response.
+    """
+    await _enforce_admin_rate_limit(request)
+    response = await admin_monitoring_service.get_users(
+        limit=limit,
+        offset=offset,
+        search=search,
+        plan=plan,
+        is_active=is_active,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_VIEWED_USERS.value,
+        target_type="users",
+        metadata={
+            "limit": limit,
+            "offset": offset,
+            "search": search,
+            "plan": plan,
+            "is_active": is_active,
+        },
+    )
+    return response
+
+
+@router.post(
+    "/users/{user_id}/block",
+    response_model=AdminUserActionResponse,
+    tags=["Admin Users"],
+)
+async def admin_block_user(request: Request, user_id: str) -> AdminUserActionResponse:
+    """
+    Block a non-admin user account without deleting it.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        user_id: User account identifier.
+
+    Returns:
+        Updated admin-safe user row.
+    """
+    await _enforce_admin_rate_limit(request)
+    response = await admin_monitoring_service.set_user_active(
+        user_id=user_id,
+        is_active=False,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_BLOCKED_USER.value,
+        target_type="user",
+        target_id=user_id,
+    )
+    return response
+
+
+@router.post(
+    "/users/{user_id}/unblock",
+    response_model=AdminUserActionResponse,
+    tags=["Admin Users"],
+)
+async def admin_unblock_user(request: Request, user_id: str) -> AdminUserActionResponse:
+    """
+    Unblock a user account.
+
+    Args:
+        request: Incoming HTTP request used for admin rate limiting.
+        user_id: User account identifier.
+
+    Returns:
+        Updated admin-safe user row.
+    """
+    await _enforce_admin_rate_limit(request)
+    response = await admin_monitoring_service.set_user_active(
+        user_id=user_id,
+        is_active=True,
+    )
+    await admin_audit_service.log_access(
+        action=AdminAuditAction.ADMIN_UNBLOCKED_USER.value,
+        target_type="user",
+        target_id=user_id,
+    )
+    return response
 
 
 @router.get(
@@ -322,41 +513,73 @@ async def admin_apply_fraud_label(
     return {"success": True, "label": label, "updated_training_events": updated_events}
 
 
-@router.get("/fraud/decisions", tags=["Admin Fraud"])
+@router.get(
+    "/fraud/decisions",
+    response_model=AdminFraudDecisionListResponse,
+    tags=["Admin Fraud"],
+)
 async def admin_fraud_decisions(
     request: Request,
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     visitor_id: str | None = None,
     action_type: str | None = None,
-) -> dict[str, object]:
+    decision: DecisionParam | None = None,
+    risk_level: SeverityParam | None = None,
+    user_id: str | None = None,
+    search: str | None = None,
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+) -> AdminFraudDecisionListResponse:
     """
     Return stored fraud decision records for administrative review.
 
     Args:
         request: Incoming HTTP request used for admin rate limiting.
         limit: Maximum number of decisions to return.
+        offset: Number of matching decisions to skip.
         visitor_id: Optional visitor filter.
         action_type: Optional decision action filter.
+        decision: Optional final decision filter.
+        risk_level: Optional risk-level filter.
+        user_id: Optional user filter.
+        search: Optional visitor/user/action substring filter.
+        created_from: Optional created-at lower bound.
+        created_to: Optional created-at upper bound.
 
     Returns:
-        Sanitized decision records for the admin UI.
+        Enriched decision records for the admin UI.
     """
     await _enforce_admin_rate_limit(request)
-    decisions = await fraud_engine_repository.list_decisions(
+    response = await admin_fraud_service.get_fraud_decisions(
         limit=limit,
+        offset=offset,
         visitor_id=visitor_id,
         action_type=action_type,
+        decision=decision,
+        risk_level=risk_level,
+        user_id=user_id,
+        search=search,
+        created_from=created_from,
+        created_to=created_to,
     )
     await admin_audit_service.log_access(
         action=AdminAuditAction.ADMIN_VIEWED_FRAUD_EVENTS.value,
         target_type="fraud_decisions",
         metadata={
             "limit": limit,
+            "offset": offset,
             "visitor_id": visitor_id,
             "action_type": action_type,
+            "decision": decision,
+            "risk_level": risk_level,
+            "user_id": user_id,
+            "search": search,
+            "created_from": created_from.isoformat() if created_from else None,
+            "created_to": created_to.isoformat() if created_to else None,
         },
     )
-    return {"total": len(decisions), "limit": limit, "items": _sanitize_doc(decisions)}
+    return response
 
 
 @router.get("/fraud/features/{visitor_id}", tags=["Admin Fraud"])

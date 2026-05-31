@@ -1,10 +1,11 @@
 import logging
+import re
 from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorCollection
 from datetime import timedelta
 
-from pymongo import ASCENDING, ReturnDocument
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 from app.database import get_database
 from app.models.user import USER_COLLECTION, UserPlan, UserRole
@@ -262,6 +263,89 @@ class UserRepository:
         )
         return await cursor.to_list(length=limit)
 
+    async def list_for_admin(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        search: str | None = None,
+        plan: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        List user records for admin management with safe, indexed filters.
+
+        Args:
+            limit: Maximum number of users to return.
+            offset: Number of matching users to skip.
+            search: Optional case-insensitive email/name substring.
+            plan: Optional subscription plan filter.
+            is_active: Optional active/blocked filter.
+
+        Returns:
+            Matching user documents sorted newest first.
+        """
+        query = _build_admin_user_query(
+            search=search,
+            plan=plan,
+            is_active=is_active,
+        )
+        cursor = (
+            self.get_collection()
+            .find(query)
+            .sort("created_at", DESCENDING)
+            .skip(offset)
+            .limit(limit)
+        )
+        return await cursor.to_list(length=limit)
+
+    async def count_for_admin(
+        self,
+        search: str | None = None,
+        plan: str | None = None,
+        is_active: bool | None = None,
+    ) -> int:
+        """
+        Count user records matching the admin management filters.
+
+        Args:
+            search: Optional case-insensitive email/name substring.
+            plan: Optional subscription plan filter.
+            is_active: Optional active/blocked filter.
+
+        Returns:
+            Number of matching user documents.
+        """
+        query = _build_admin_user_query(
+            search=search,
+            plan=plan,
+            is_active=is_active,
+        )
+        return await self.get_collection().count_documents(query)
+
+    async def set_active(self, user_id: str, is_active: bool) -> dict[str, Any] | None:
+        """
+        Block or unblock a user without deleting the account.
+
+        Args:
+            user_id: Unique user identifier to update.
+            is_active: New account active state.
+
+        Returns:
+            Updated user document, if found.
+        """
+        if not user_id:
+            return None
+        return await self.get_collection().find_one_and_update(
+            {"_id": user_id},
+            {
+                "$set": {
+                    "is_active": is_active,
+                    "updated_at": utc_now(),
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+
 
 async def ensure_user_indexes() -> None:
     """
@@ -303,6 +387,14 @@ async def ensure_user_indexes() -> None:
     await collection.create_index(
         [("role", ASCENDING)],
         name="idx_users_role",
+    )
+    await collection.create_index(
+        [("plan", ASCENDING)],
+        name="idx_users_plan",
+    )
+    await collection.create_index(
+        [("is_active", ASCENDING)],
+        name="idx_users_is_active",
     )
     logger.info("Ensured user collection indexes")
 
@@ -350,3 +442,22 @@ async def seed_default_admin() -> None:
         }
     )
     logger.info("Seeded default admin user email=%s", email)
+
+
+def _build_admin_user_query(
+    search: str | None = None,
+    plan: str | None = None,
+    is_active: bool | None = None,
+) -> dict[str, Any]:
+    query: dict[str, Any] = {}
+    if search:
+        search_regex = {"$regex": re.escape(search), "$options": "i"}
+        query["$or"] = [
+            {"email": search_regex},
+            {"full_name": search_regex},
+        ]
+    if plan:
+        query["plan"] = plan
+    if is_active is not None:
+        query["is_active"] = is_active
+    return query

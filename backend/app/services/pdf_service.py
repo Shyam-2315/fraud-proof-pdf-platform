@@ -195,6 +195,7 @@ class PDFService:
             block_reason,
         )
         if limit_reached:
+            request.state.block_reason = "FREE_LIMIT_REACHED"
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
                 user_id=None,
@@ -211,6 +212,7 @@ class PDFService:
             )
 
         if fraud_blocked:
+            request.state.block_reason = str(block_reason or "VISITOR_BLOCKED")
             await self.fraud_event_service.create_from_request(
                 request=request,
                 visitor=visitor,
@@ -267,11 +269,15 @@ class PDFService:
             }
         ).as_dict()
         if risk_decision["decision"] == "BLOCK":
+            request.state.block_reason = "RISK_ENGINE_BLOCK"
+            request.state.fraud_score = risk_decision.get("risk_score")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"success": False, "message": "Too many requests. Please wait a moment and try again."},
             )
         if risk_decision["decision"] == "REQUIRE_LOGIN":
+            request.state.block_reason = "RISK_ENGINE_REQUIRE_LOGIN"
+            request.state.fraud_score = risk_decision.get("risk_score")
             logger.info(
                 "Anonymous PDF blocked by risk engine visitor_id=%s used=%s remaining=%s block_reason=%s",
                 visitor.get("_id"),
@@ -305,6 +311,10 @@ class PDFService:
         )
         if decision["decision"] == "REQUIRE_LOGIN":
             free_limit_reached = shared_used >= shared_limit
+            request.state.block_reason = (
+                "FREE_LIMIT_REACHED" if free_limit_reached else "FRAUD_DECISION_REQUIRE_LOGIN"
+            )
+            request.state.fraud_score = decision.get("risk_score")
             await self.behavior_service.record_internal_event(
                 visitor_id=visitor["_id"],
                 user_id=None,
@@ -355,6 +365,8 @@ class PDFService:
                 ),
             )
         if decision["decision"] == "BLOCK":
+            request.state.block_reason = "FRAUD_DECISION_BLOCK"
+            request.state.fraud_score = decision.get("risk_score")
             await self.fraud_event_service.create_from_request(
                 request=request,
                 visitor=visitor,
@@ -572,6 +584,7 @@ class PDFService:
         """
         usage = await self.user_usage_service.get_current_usage(current_user)
         if usage["used"] >= usage["limit"]:
+            request.state.block_reason = "MONTHLY_LIMIT_REACHED"
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
