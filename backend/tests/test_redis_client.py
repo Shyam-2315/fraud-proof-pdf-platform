@@ -1,11 +1,13 @@
 """Tests for shared Redis client lifecycle handling."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
 
 import app.redis_client as redis_client
+from app.routes import health as health_routes
 
 
 class _FakeRedis:
@@ -36,18 +38,27 @@ def _reset_redis_state() -> None:
 def test_connect_to_redis_initializes_shared_client(monkeypatch) -> None:
     """Successful startup should cache one Redis client for later health checks."""
     fake_client = _FakeRedis()
+    captured: dict = {}
+
+    def _from_url(*args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return fake_client
+
     monkeypatch.setattr(
         redis_client,
         "get_settings",
         lambda: SimpleNamespace(REDIS_URL="rediss://default:secret@example.upstash.io:6379", APP_ENV="production"),
     )
-    monkeypatch.setattr(redis_client.redis, "from_url", lambda *args, **kwargs: fake_client)
+    monkeypatch.setattr(redis_client.redis, "from_url", _from_url)
 
     asyncio.run(redis_client.connect_to_redis())
 
     assert redis_client.get_redis() is fake_client
     assert asyncio.run(redis_client.ping_redis()) is True
     assert fake_client.ping_calls >= 2
+    assert captured["args"][0].startswith("rediss://")
+    assert captured["kwargs"]["decode_responses"] is True
 
 
 def test_connect_to_redis_retains_connection_error_for_health(monkeypatch) -> None:
@@ -79,3 +90,22 @@ def test_connect_to_redis_allows_missing_local_configuration(monkeypatch) -> Non
 
     with pytest.raises(RuntimeError, match="Redis URL is not configured"):
         redis_client.get_redis()
+
+
+def test_health_redis_reports_shared_client_failure(monkeypatch) -> None:
+    """Redis health should preserve the shared client error detail."""
+
+    async def _failed_ping() -> bool:
+        raise RuntimeError("upstash timeout")
+
+    monkeypatch.setattr(health_routes, "ping_redis", _failed_ping)
+
+    response = asyncio.run(health_routes.health_redis())
+    body = json.loads(response.body)
+
+    assert response.status_code == 503
+    assert body == {
+        "status": "error",
+        "service": "redis",
+        "detail": "upstash timeout",
+    }

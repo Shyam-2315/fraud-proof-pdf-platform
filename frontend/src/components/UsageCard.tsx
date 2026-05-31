@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getVisitorStatusMessage,
   getVisitorUsageSnapshot,
+  isVisitorSecurityBlocked,
   type VisitorStatus,
 } from "../api/userApi";
 
@@ -14,6 +15,7 @@ export default function UsageCard({
   showLoginCta?: boolean;
 }) {
   const { used, remaining, freeLimit } = getVisitorUsageSnapshot(status);
+  const securityBlocked = isVisitorSecurityBlocked(status);
   const limit = freeLimit;
   const percent = Math.min(100, Math.round((used / Math.max(limit, 1)) * 100));
 
@@ -56,6 +58,13 @@ export default function UsageCard({
             <Link className="btn-primary" state={{ from: "/generate" }} to="/login">Login</Link>
             <Link className="btn-secondary" state={{ from: "/generate" }} to="/signup">Sign Up</Link>
           </div>
+        </div>
+      ) : null}
+      {securityBlocked ? (
+        <div className="mt-5 rounded-lg border border-[#f2b7a1] bg-[#fff0ea] p-4">
+          <p className="text-sm font-bold text-[#8f2a08]">
+            For security, PDF generation is currently unavailable. Please contact support if this seems wrong.
+          </p>
         </div>
       ) : null}
     </section>

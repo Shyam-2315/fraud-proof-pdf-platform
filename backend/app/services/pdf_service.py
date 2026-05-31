@@ -272,9 +272,19 @@ class PDFService:
                 detail={"success": False, "message": "Too many requests. Please wait a moment and try again."},
             )
         if risk_decision["decision"] == "REQUIRE_LOGIN":
+            logger.info(
+                "Anonymous PDF blocked by risk engine visitor_id=%s used=%s remaining=%s block_reason=%s",
+                visitor.get("_id"),
+                shared_used,
+                remaining,
+                "RISK_ENGINE_REQUIRE_LOGIN",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_limit_response(message="Free limit reached. Please log in to continue."),
+                detail=_build_block_response(
+                    free_limit=shared_limit,
+                    used=shared_used,
+                ),
             )
         decision = await self.fraud_decision_service.decide(
             visitor=visitor,
@@ -328,9 +338,21 @@ class PDFService:
                 action_type="PDF_GENERATE_BLOCKED",
                 payload=payload,
             )
+            logger.info(
+                "Anonymous PDF blocked by fraud decision visitor_id=%s used=%s remaining=%s block_reason=%s",
+                visitor.get("_id"),
+                shared_used,
+                remaining,
+                "FREE_LIMIT_REACHED" if free_limit_reached else "FRAUD_DECISION_REQUIRE_LOGIN",
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=_build_limit_response(),
+                detail=_build_limit_response()
+                if free_limit_reached
+                else _build_block_response(
+                    free_limit=shared_limit,
+                    used=shared_used,
+                ),
             )
         if decision["decision"] == "BLOCK":
             await self.fraud_event_service.create_from_request(
@@ -426,7 +448,7 @@ class PDFService:
             )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Too many requests. Please wait a moment and try again.",
+                detail="Unable to generate PDF. Please try again.",
             ) from exc
 
         updated_usage_status = await self.anonymous_usage_service.get_anonymous_usage_status(

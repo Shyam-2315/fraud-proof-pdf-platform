@@ -134,6 +134,8 @@ class BaseAppSettings(BaseSettings):
         """Preserve raw CORS origin input while trimming surrounding whitespace."""
         if isinstance(value, str):
             return value.strip()
+        if isinstance(value, (list, tuple)):
+            return json.dumps(list(value))
         return value
 
     @field_validator(

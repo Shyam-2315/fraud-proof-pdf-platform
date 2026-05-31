@@ -15,6 +15,7 @@ export type VisitorStatus = {
   free_usage_count: number;
   free_usage_limit: number;
   remaining_free_uses: number;
+  limit_reached?: boolean;
   is_blocked: boolean;
   message: string | null;
   requires_login?: boolean;
@@ -55,6 +56,8 @@ export type PdfHistory = {
 let publicConfigPromise: Promise<PublicConfig> | null = null;
 let identifyPromise: Promise<{ success: boolean; visitor_id: string; message: string }> | null = null;
 let identifiedVisitor: { success: boolean; visitor_id: string; message: string } | null = null;
+const LIMIT_REACHED_MESSAGE = "Free limit reached. Please log in to continue.";
+const SECURITY_BLOCK_MESSAGE = "For security, PDF generation is currently unavailable. Please contact support if this seems wrong.";
 
 export function getPublicConfig() {
   if (!publicConfigPromise) {
@@ -138,22 +141,35 @@ export function getVisitorUsageSnapshot(status: Partial<VisitorStatus> | null) {
 }
 
 export function isVisitorStatusBlocked(status: Partial<VisitorStatus> | null) {
+  return isVisitorLimitReached(status) || isVisitorSecurityBlocked(status);
+}
+
+export function isVisitorLimitReached(status: Partial<VisitorStatus> | null) {
   if (!status) return false;
-  const fraudBlocked = Boolean(status.fraud_blocked);
   const { remaining } = getVisitorUsageSnapshot(status);
-  return fraudBlocked || remaining <= 0;
+  return remaining <= 0;
+}
+
+export function isVisitorSecurityBlocked(status: Partial<VisitorStatus> | null) {
+  return Boolean(status?.fraud_blocked);
 }
 
 export function getVisitorStatusMessage(status: Partial<VisitorStatus> | null) {
   const { freeLimit } = getVisitorUsageSnapshot(status);
-  return isVisitorStatusBlocked(status)
-    ? status?.message || "Free limit reached. Please log in to continue."
-    : `You can generate ${freeLimit} PDFs for free.`;
+  if (isVisitorSecurityBlocked(status)) {
+    return status?.message || SECURITY_BLOCK_MESSAGE;
+  }
+  if (isVisitorLimitReached(status)) {
+    return status?.message || LIMIT_REACHED_MESSAGE;
+  }
+  return `You can generate ${freeLimit} PDFs for free.`;
 }
 
 export function normalizeVisitorStatus(status: VisitorStatus): VisitorStatus {
   const usage = getVisitorUsageSnapshot(status);
-  const blocked = isVisitorStatusBlocked(status);
+  const limitReached = usage.remaining <= 0;
+  const securityBlocked = Boolean(status.fraud_blocked);
+  const blocked = limitReached || securityBlocked;
   return {
     ...status,
     used: usage.used,
@@ -162,8 +178,14 @@ export function normalizeVisitorStatus(status: VisitorStatus): VisitorStatus {
     free_usage_count: usage.used,
     free_usage_limit: usage.freeLimit,
     remaining_free_uses: usage.remaining,
+    limit_reached: limitReached,
+    fraud_blocked: securityBlocked,
     is_blocked: blocked,
-    requires_login: blocked,
-    message: blocked ? status.message || "Free limit reached. Please log in to continue." : null,
+    requires_login: limitReached,
+    message: securityBlocked
+      ? status.message || SECURITY_BLOCK_MESSAGE
+      : limitReached
+        ? status.message || LIMIT_REACHED_MESSAGE
+        : null,
   };
 }

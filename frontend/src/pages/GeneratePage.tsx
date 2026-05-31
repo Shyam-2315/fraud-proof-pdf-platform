@@ -7,6 +7,8 @@ import {
   generatePdf,
   getVisitorStatusAfterIdentify,
   getVisitorStatusMessage,
+  isVisitorLimitReached,
+  isVisitorSecurityBlocked,
   isVisitorStatusBlocked,
   sendBehaviorEvent,
   type GeneratePdfResponse,
@@ -27,7 +29,7 @@ export default function GeneratePage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [lastPdf, setLastPdf] = useState<{ pdf_id: string; file_name?: string } | null>(null);
-  const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [showLimitPrompt, setShowLimitPrompt] = useState(false);
   const [generating, setGenerating] = useState(false);
   const { isAuthenticated } = useAuth();
 
@@ -35,10 +37,8 @@ export default function GeneratePage() {
     const nextStatus = await getVisitorStatusAfterIdentify();
     setStatus(nextStatus);
     if (!isVisitorStatusBlocked(nextStatus)) {
-      setShowLoginPrompt(false);
-      setError((current) =>
-        current === "Free limit reached. Please log in to continue." ? "" : current,
-      );
+      setShowLimitPrompt(false);
+      setError("");
     }
     return nextStatus;
   }
@@ -72,13 +72,13 @@ export default function GeneratePage() {
     if (!isAuthenticated && isVisitorStatusBlocked(status)) {
       setMessage("");
       setError(getVisitorStatusMessage(status));
-      setShowLoginPrompt(true);
+      setShowLimitPrompt(isVisitorLimitReached(status));
       return;
     }
     setError("");
     setMessage("");
     setLastPdf(null);
-    setShowLoginPrompt(false);
+    setShowLimitPrompt(false);
     setGenerating(true);
     try {
       await ensureVisitorIdentified();
@@ -94,17 +94,22 @@ export default function GeneratePage() {
         const blockedByStatus = isVisitorStatusBlocked(refreshedStatus);
         if (blockedByStatus) {
           setError(getVisitorStatusMessage(refreshedStatus));
-          setShowLoginPrompt(true);
+          setShowLimitPrompt(isVisitorLimitReached(refreshedStatus));
         } else {
-          setError(body.message || "Too many requests. Please wait a moment and try again.");
-          setShowLoginPrompt(false);
+          setError(getGenerateErrorMessage(err, body));
+          setShowLimitPrompt(false);
         }
         if (!isAuthenticated && refreshedStatus === null) {
           setError("We could not start your session. Please refresh and try again.");
         }
         return;
       }
-      setError("Too many requests. Please wait a moment and try again.");
+      if (err instanceof ApiError) {
+        setError(getGenerateErrorMessage(err, err.body as Partial<GeneratePdfResponse>));
+      } else {
+        setError("We could not generate your PDF right now. Please try again.");
+      }
+      setShowLimitPrompt(false);
     } finally {
       setGenerating(false);
     }
@@ -133,7 +138,7 @@ export default function GeneratePage() {
             {error ? (
               <div className="space-y-3">
                 <ErrorState message={error} />
-                {showLoginPrompt ? (
+                {showLimitPrompt ? (
                   <div className="panel p-5">
                     <p className="mb-4 text-sm font-bold text-[#52647f]">
                       Free limit reached. Please log in to continue.
@@ -165,14 +170,14 @@ export default function GeneratePage() {
             ) : (
               <UsageCard
                 status={status}
-                showLoginCta={!isAuthenticated && isVisitorStatusBlocked(status)}
+                showLoginCta={!isAuthenticated && isVisitorLimitReached(status)}
               />
             )}
           </aside>
         </div>
       </main>
       <Footer />
-      {showLoginPrompt ? (
+      {showLimitPrompt ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#101827]/60 px-4">
           <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
             <h2 className="text-xl font-black text-[#10213f]">Log in to continue</h2>
@@ -182,7 +187,7 @@ export default function GeneratePage() {
             <div className="mt-5 flex flex-wrap gap-3">
               <Link className="btn-primary" state={{ from: "/generate" }} to="/login">Login</Link>
               <Link className="btn-secondary" state={{ from: "/generate" }} to="/signup">Sign Up</Link>
-              <button className="btn-secondary" type="button" onClick={() => setShowLoginPrompt(false)}>
+              <button className="btn-secondary" type="button" onClick={() => setShowLimitPrompt(false)}>
                 Cancel
               </button>
             </div>
@@ -191,6 +196,22 @@ export default function GeneratePage() {
       ) : null}
     </div>
   );
+}
+
+function getGenerateErrorMessage(error: ApiError, body: Partial<GeneratePdfResponse>) {
+  if (error.status === 429) {
+    return "Too many requests. Please wait a moment and try again.";
+  }
+  if (error.status >= 500) {
+    return "We could not generate your PDF right now. Please try again.";
+  }
+  if (isVisitorSecurityBlocked(body)) {
+    return getVisitorStatusMessage(body as Partial<VisitorStatus>);
+  }
+  if (body.message && body.message !== "Free limit reached. Please log in to continue.") {
+    return body.message;
+  }
+  return "We could not generate your PDF right now. Please try again.";
 }
 
 async function downloadPdf(pdfId: string, fileName?: string) {

@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { getAccountUsage, type AccountUsage } from "../api/authApi";
 import {
   getVisitorStatusAfterIdentify,
-  isVisitorStatusBlocked,
+  isVisitorLimitReached,
+  isVisitorSecurityBlocked,
   type VisitorStatus,
 } from "../api/userApi";
 import AccountUsageCard from "../components/AccountUsageCard";
@@ -60,15 +61,20 @@ export default function UsagePage() {
         ) : null}
         {!loading && !error && !isAuthenticated ? (
           <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
-            <UsageCard status={status} showLoginCta={isVisitorStatusBlocked(status)} />
+            <UsageCard status={status} showLoginCta={isVisitorLimitReached(status)} />
             <section className="panel p-5">
               <h2 className="text-xl font-black text-[#10213f]">Account access</h2>
               <p className="mt-2 text-sm font-semibold text-[#52647f]">
                 Account required after free limit.
               </p>
-              {isVisitorStatusBlocked(status) ? (
+              {isVisitorLimitReached(status) ? (
                 <p className="mt-5 rounded-lg bg-[#fff4d8] p-4 text-sm font-black text-[#765000]">
                   You have used your free PDF generations. Please log in to continue.
+                </p>
+              ) : null}
+              {isVisitorSecurityBlocked(status) ? (
+                <p className="mt-5 rounded-lg bg-[#ffe9df] p-4 text-sm font-black text-[#8f2a08]">
+                  For security, PDF generation is currently unavailable. Please contact support if this seems wrong.
                 </p>
               ) : null}
             </section>

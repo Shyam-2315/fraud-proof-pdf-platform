@@ -55,12 +55,32 @@ def test_generate_page_identifies_before_status_and_before_generate() -> None:
 def test_generate_page_uses_normalized_remaining_for_blocked_state() -> None:
     _require_frontend_source()
     page_source = (FRONTEND_SRC / "pages" / "GeneratePage.tsx").read_text(encoding="utf-8")
+    usage_page_source = (FRONTEND_SRC / "pages" / "UsagePage.tsx").read_text(encoding="utf-8")
+    usage_card_source = (FRONTEND_SRC / "components" / "UsageCard.tsx").read_text(encoding="utf-8")
     usage_api_source = (FRONTEND_SRC / "api" / "userApi.ts").read_text(encoding="utf-8")
 
     assert "isVisitorStatusBlocked(status)" in page_source
+    assert "isVisitorLimitReached(status)" in page_source
     assert "getVisitorStatusMessage(status)" in page_source
+    assert "showLoginCta={!isAuthenticated && isVisitorLimitReached(status)}" in page_source
+    assert "showLoginCta={isVisitorLimitReached(status)}" in usage_page_source
+    assert "isVisitorSecurityBlocked(status)" in usage_card_source
     assert "const { remaining } = getVisitorUsageSnapshot(status);" in usage_api_source
-    assert "return fraudBlocked || remaining <= 0;" in usage_api_source
+    assert "limit_reached?: boolean;" in usage_api_source
+    assert "return isVisitorLimitReached(status) || isVisitorSecurityBlocked(status);" in usage_api_source
+    assert "return remaining <= 0;" in usage_api_source
+    assert "requires_login: limitReached" in usage_api_source
+
+
+def test_frontend_does_not_show_free_limit_prompt_for_security_blocks() -> None:
+    _require_frontend_source()
+    page_source = (FRONTEND_SRC / "pages" / "GeneratePage.tsx").read_text(encoding="utf-8")
+    usage_api_source = (FRONTEND_SRC / "api" / "userApi.ts").read_text(encoding="utf-8")
+
+    assert "setShowLimitPrompt(isVisitorLimitReached" in page_source
+    assert "isVisitorSecurityBlocked(body)" in page_source
+    assert "SECURITY_BLOCK_MESSAGE" in usage_api_source
+    assert "fraud_blocked?: boolean;" in usage_api_source
 
 
 def test_frontend_exposes_verify_email_route_and_api_calls() -> None:

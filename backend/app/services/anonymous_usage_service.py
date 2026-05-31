@@ -327,14 +327,19 @@ class AnonymousUsageService:
         """Classify anonymous visitor blocking into limit and explicit-fraud buckets."""
         stored_block_reason = str((visitor or {}).get("block_reason") or "").strip() or None
         visitor_blocked = bool((visitor or {}).get("is_blocked", False))
+        stored_fraud_blocked = bool((visitor or {}).get("fraud_blocked", False))
         limit_reached = remaining <= 0
         # Legacy visitor records may still carry raw block flags from old free-limit logic.
-        # Treat only explicit non-limit reasons as fraud/manual blocks.
-        fraud_blocked = stored_block_reason not in {None, _LIMIT_BLOCK_REASON}
+        # Treat explicit fraud flags or non-limit reasons as fraud/manual blocks, but
+        # never let a stale FREE_LIMIT_REACHED reason override fresh remaining quota.
+        has_non_limit_reason = stored_block_reason not in {None, _LIMIT_BLOCK_REASON}
+        fraud_blocked = (stored_fraud_blocked and stored_block_reason != _LIMIT_BLOCK_REASON) or has_non_limit_reason
         block_reason = (
             _LIMIT_BLOCK_REASON
             if limit_reached
             else stored_block_reason
+            if fraud_blocked and stored_block_reason
+            else "VISITOR_BLOCKED"
             if fraud_blocked
             else None
         )

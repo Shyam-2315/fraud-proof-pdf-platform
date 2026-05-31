@@ -164,6 +164,31 @@ def test_cors_origins_parsing_supports_render_formats(
     assert settings.cors_origins_list == expected
 
 
+def test_cors_origins_parsing_accepts_direct_list_input() -> None:
+    """Ensure direct list values are normalized for callers outside env parsing."""
+    settings = ProductionSettings(
+        FRONTEND_URL="https://pdfcraft-customer.vercel.app",
+        ADMIN_FRONTEND_URL="https://temp-admin.vercel.app",
+        BACKEND_PUBLIC_URL="https://pdfcraft-api.example.com",
+        CORS_ORIGINS=[
+            "https://pdfcraft-customer.vercel.app",
+            "https://temp-admin.vercel.app",
+        ],
+        MONGODB_URL="mongodb://mongo.internal:27017",
+        MONGODB_DB_NAME="fraud_pdf",
+        REDIS_URL="rediss://default:secret@example.upstash.io:6379",
+        JWT_SECRET_KEY="prod-secret-value-that-is-long-enough",
+        ADMIN_API_KEY="prod-admin-key-that-is-long-enough",
+        ENABLE_DEFAULT_ADMIN_SEED=False,
+        SECURE_COOKIES=True,
+    )
+
+    assert settings.cors_origins_list == [
+        "https://pdfcraft-customer.vercel.app",
+        "https://temp-admin.vercel.app",
+    ]
+
+
 def test_development_alias_maps_to_dev_settings(monkeypatch) -> None:
     """Ensure the legacy development alias still resolves to dev settings."""
     _clear_backend_env(monkeypatch)
