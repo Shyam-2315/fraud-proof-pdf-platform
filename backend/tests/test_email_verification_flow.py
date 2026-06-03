@@ -64,6 +64,7 @@ def test_disposable_domain_register_is_rejected() -> None:
     with httpx.Client(base_url=BASE_URL, timeout=10.0) as client:
         response = client.post(
             "/api/auth/register",
+            headers={"X-Forwarded-For": f"198.18.{RUN_IP_SEGMENT}.{uuid4().int % 250 + 1}"},
             json={
                 "email": f"disposable-{uuid4()}@mailinator.com",
                 "full_name": "Disposable Test",
