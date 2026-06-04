@@ -25,6 +25,7 @@ from app.utils.security import (
     safe_append_unique,
     utc_now,
 )
+from app.utils.sanitization import sanitize_log_value
 
 
 class VisitorService:
@@ -89,7 +90,7 @@ class VisitorService:
         request_cookie_id = get_visitor_cookie(request.cookies)
         generated_cookie_id = request_cookie_id or generate_uuid()
         current_ip = normalize_ip(client_ip(request))
-        current_user_agent = request.headers.get("user-agent", "")
+        current_user_agent = sanitize_log_value(request.headers.get("user-agent", ""))
         request_headers = dict(request.headers)
         now = utc_now()
 

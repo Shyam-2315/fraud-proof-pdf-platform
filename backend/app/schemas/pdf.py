@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.utils.sanitization import contains_xss_payload, sanitize_plain_text
 
 
 class PDFGenerateRequest(BaseModel):
@@ -9,6 +11,17 @@ class PDFGenerateRequest(BaseModel):
     """
     title: str = Field(min_length=1, max_length=120)
     content: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("title", "content")
+    @classmethod
+    def validate_plain_text(cls, value: str, info) -> str:
+        max_length = 120 if info.field_name == "title" else 20000
+        if contains_xss_payload(value):
+            raise ValueError(f"{info.field_name.replace('_', ' ').title()} contains unsafe HTML or script content.")
+        sanitized = sanitize_plain_text(value, max_length=max_length)
+        if not sanitized:
+            raise ValueError(f"{info.field_name.replace('_', ' ').title()} cannot be empty.")
+        return sanitized
 
 
 class PDFGenerateResponse(BaseModel):

@@ -35,6 +35,7 @@ from app.fraud_engine.decision_engine import FraudEngineDecisionService
 from app.services.rate_limit_service import client_ip
 from app.services.token_service import TokenService
 from app.utils.security import generate_uuid, normalize_ip, utc_now
+from app.utils.sanitization import sanitize_plain_text
 
 
 class AuthService:
@@ -136,7 +137,7 @@ class AuthService:
             "_id": generate_uuid(),
             "email": email,
             "password_hash": hash_password(payload.password),
-            "full_name": payload.full_name,
+            "full_name": sanitize_plain_text(payload.full_name, max_length=100) if payload.full_name else None,
             "role": UserRole.CUSTOMER.value,
             "plan": UserPlan.FREE.value,
             "is_active": True,
@@ -551,7 +552,7 @@ def build_user_response(user: dict[str, Any]) -> UserResponse:
         id=user["_id"],
         user_id=user["_id"],
         email=user.get("email", ""),
-        full_name=user.get("full_name"),
+        full_name=sanitize_plain_text(user.get("full_name"), max_length=100) if user.get("full_name") else None,
         role=user.get("role", UserRole.CUSTOMER.value),
         plan=user.get("plan", UserPlan.FREE.value),
         is_active=bool(user.get("is_active", False)),

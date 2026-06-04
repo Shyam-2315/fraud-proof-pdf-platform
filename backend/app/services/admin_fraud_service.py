@@ -31,6 +31,7 @@ from app.schemas.fraud_event import (
 from app.services.fraud_event_service import build_fraud_event_item
 from app.services.visitor_service import build_usage_summary
 from app.utils.security import utc_now
+from app.utils.sanitization import sanitize_log_value, sanitize_plain_text, sanitize_mapping, sanitize_value
 
 
 class AdminFraudService:
@@ -351,7 +352,7 @@ class AdminFraudService:
             decision=decision,
             risk_level=risk_level,
             user_id=user_id,
-            search=search,
+            search=sanitize_plain_text(search, max_length=120) if search else None,
             created_from=created_from,
             created_to=created_to,
         )
@@ -363,7 +364,7 @@ class AdminFraudService:
             decision=decision,
             risk_level=risk_level,
             user_id=user_id,
-            search=search,
+            search=sanitize_plain_text(search, max_length=120) if search else None,
             created_from=created_from,
             created_to=created_to,
         )
@@ -433,9 +434,9 @@ def _build_admin_visitor_item(visitor: dict[str, Any]) -> AdminFraudVisitorItem:
         visitor_id=str(visitor.get("_id", "")),
         **usage_summary,
         risk_score=int(visitor.get("risk_score", 0)),
-        risk_level=str(visitor.get("risk_level", "LOW")),
+        risk_level=sanitize_log_value(visitor.get("risk_level", "LOW")),
         is_blocked=bool(visitor.get("is_blocked", False)),
-        block_reason=visitor.get("block_reason"),
+        block_reason=sanitize_log_value(visitor.get("block_reason")),
         local_storage_id_count=len(visitor.get("local_storage_ids", [])),
         session_id_count=len(visitor.get("session_ids", [])),
         fingerprint_hash_count=len(visitor.get("fingerprint_hashes", [])),
@@ -458,15 +459,15 @@ def _build_admin_pdf_item(pdf: dict[str, Any]) -> AdminPDFItem:
     """
     return AdminPDFItem(
         pdf_id=str(pdf.get("_id", "")),
-        visitor_id=pdf.get("visitor_id"),
-        title=str(pdf.get("title", "")),
-        file_name=str(pdf.get("file_name", "")),
-        file_path=str(pdf.get("file_path", "")),
-        generation_type=str(
+        visitor_id=sanitize_log_value(pdf.get("visitor_id")),
+        title=sanitize_plain_text(str(pdf.get("title", "")), max_length=120),
+        file_name=sanitize_log_value(pdf.get("file_name", "")),
+        file_path=sanitize_log_value(pdf.get("file_path", "")),
+        generation_type=sanitize_log_value(
             pdf.get("generation_type", PDFGenerationType.ANONYMOUS.value)
         ),
-        fingerprint_hash=pdf.get("fingerprint_hash"),
-        ip_address=pdf.get("ip_address"),
+        fingerprint_hash=sanitize_log_value(pdf.get("fingerprint_hash")),
+        ip_address=sanitize_log_value(pdf.get("ip_address")),
         created_at=_datetime_or_now(pdf.get("created_at")),
     )
 
@@ -488,15 +489,15 @@ def _build_fraud_decision_item(
     risk_score = decision_record.get("final_risk_score", decision_record.get("risk_score", 0))
     return AdminFraudDecisionItem(
         id=str(decision_record.get("id") or decision_record.get("_id") or ""),
-        visitor_id=decision_record.get("visitor_id"),
-        user_id=decision_record.get("user_id"),
-        ip_address=_last_or_none((visitor or {}).get("ip_addresses", [])),
-        fingerprint_hash=(visitor or {}).get("primary_fingerprint_hash"),
+        visitor_id=sanitize_log_value(decision_record.get("visitor_id")),
+        user_id=sanitize_log_value(decision_record.get("user_id")),
+        ip_address=sanitize_log_value(_last_or_none((visitor or {}).get("ip_addresses", []))),
+        fingerprint_hash=sanitize_log_value((visitor or {}).get("primary_fingerprint_hash")),
         risk_score=float(risk_score or 0),
-        risk_level=str(decision_record.get("risk_level", "LOW")),
-        decision=str(decision_record.get("decision", "")),
-        action_type=decision_record.get("action_type"),
-        reason=_decision_reason_text(decision_record.get("reasons")),
+        risk_level=sanitize_log_value(decision_record.get("risk_level", "LOW")),
+        decision=sanitize_log_value(decision_record.get("decision", "")),
+        action_type=sanitize_log_value(decision_record.get("action_type")),
+        reason=sanitize_log_value(_decision_reason_text(decision_record.get("reasons"))),
         created_at=_datetime_or_now(decision_record.get("created_at")),
     )
 
@@ -513,27 +514,27 @@ def _sanitize_visitor(visitor: dict[str, Any]) -> dict[str, Any]:
     """
     return {
         "visitor_id": str(visitor.get("_id", "")),
-        "cookie_id": visitor.get("cookie_id"),
-        "local_storage_ids": visitor.get("local_storage_ids", []),
-        "session_ids": visitor.get("session_ids", []),
-        "fingerprint_hashes": visitor.get("fingerprint_hashes", []),
-        "primary_fingerprint_hash": visitor.get("primary_fingerprint_hash"),
-        "ip_addresses": visitor.get("ip_addresses", []),
-        "user_agents": visitor.get("user_agents", []),
-        "device_info": visitor.get("device_info", {}),
-        "device_profile_hashes": visitor.get("device_profile_hashes", []),
-        "canvas_hashes": visitor.get("canvas_hashes", []),
-        "webgl_hashes": visitor.get("webgl_hashes", []),
-        "audio_hashes": visitor.get("audio_hashes", []),
-        "automation_signals": visitor.get("automation_signals", {}),
-        "ip_change_history": visitor.get("ip_change_history", []),
-        "risk_reasons": visitor.get("risk_reasons", []),
-        "last_risk_signals": visitor.get("last_risk_signals", {}),
+        "cookie_id": sanitize_log_value(visitor.get("cookie_id")),
+        "local_storage_ids": sanitize_value(visitor.get("local_storage_ids", [])),
+        "session_ids": sanitize_value(visitor.get("session_ids", [])),
+        "fingerprint_hashes": sanitize_value(visitor.get("fingerprint_hashes", [])),
+        "primary_fingerprint_hash": sanitize_log_value(visitor.get("primary_fingerprint_hash")),
+        "ip_addresses": sanitize_value(visitor.get("ip_addresses", [])),
+        "user_agents": sanitize_value(visitor.get("user_agents", [])),
+        "device_info": sanitize_mapping(visitor.get("device_info", {})),
+        "device_profile_hashes": sanitize_value(visitor.get("device_profile_hashes", [])),
+        "canvas_hashes": sanitize_value(visitor.get("canvas_hashes", [])),
+        "webgl_hashes": sanitize_value(visitor.get("webgl_hashes", [])),
+        "audio_hashes": sanitize_value(visitor.get("audio_hashes", [])),
+        "automation_signals": sanitize_mapping(visitor.get("automation_signals", {})),
+        "ip_change_history": sanitize_value(visitor.get("ip_change_history", [])),
+        "risk_reasons": sanitize_value(visitor.get("risk_reasons", [])),
+        "last_risk_signals": sanitize_mapping(visitor.get("last_risk_signals", {})),
         "free_usage_count": int(visitor.get("free_usage_count", 0)),
         "risk_score": int(visitor.get("risk_score", 0)),
-        "risk_level": str(visitor.get("risk_level", "LOW")),
+        "risk_level": sanitize_log_value(visitor.get("risk_level", "LOW")),
         "is_blocked": bool(visitor.get("is_blocked", False)),
-        "block_reason": visitor.get("block_reason"),
+        "block_reason": sanitize_log_value(visitor.get("block_reason")),
         "created_at": _datetime_or_now(visitor.get("created_at")),
         "last_seen_at": _datetime_or_now(visitor.get("last_seen_at")),
     }
@@ -551,13 +552,13 @@ def _sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
     """
     return {
         "user_id": str(user.get("_id", "")),
-        "email": user.get("email"),
-        "role": user.get("role"),
-        "plan": user.get("plan"),
-        "linked_visitor_ids": user.get("linked_visitor_ids", []),
-        "fingerprint_hashes": user.get("fingerprint_hashes", []),
-        "device_profile_hashes": user.get("device_profile_hashes", []),
-        "ip_addresses": user.get("ip_addresses", []),
+        "email": sanitize_log_value(user.get("email")),
+        "role": sanitize_log_value(user.get("role")),
+        "plan": sanitize_log_value(user.get("plan")),
+        "linked_visitor_ids": sanitize_value(user.get("linked_visitor_ids", [])),
+        "fingerprint_hashes": sanitize_value(user.get("fingerprint_hashes", [])),
+        "device_profile_hashes": sanitize_value(user.get("device_profile_hashes", [])),
+        "ip_addresses": sanitize_value(user.get("ip_addresses", [])),
         "created_at": _datetime_or_now(user.get("created_at")),
         "last_login_at": user.get("last_login_at"),
     }
@@ -570,11 +571,11 @@ def _decision_reason_text(reasons: Any) -> str | None:
         parts = []
         for reason in reasons:
             if isinstance(reason, dict):
-                parts.append(str(reason.get("message") or reason.get("reason") or reason))
+                parts.append(sanitize_log_value(reason.get("message") or reason.get("reason") or reason))
             else:
-                parts.append(str(reason))
+                parts.append(sanitize_log_value(reason))
         return "; ".join(part for part in parts if part)
-    return str(reasons)
+    return sanitize_log_value(reasons)
 
 
 def _last_or_none(values: list[Any]) -> Any:
@@ -591,7 +592,7 @@ def _sanitize_mongo_doc(item: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Operation result represented as `dict[str, Any]`.
     """
-    return {key: value for key, value in item.items() if key != "_id"}
+    return {sanitize_log_value(key): sanitize_value(value) for key, value in item.items() if key != "_id"}
 
 
 def _build_timeline(
@@ -615,7 +616,7 @@ def _build_timeline(
             id=str(visitor.get("_id", "")),
             item_type="VISITOR",
             title="Visitor first seen",
-            metadata={"risk_level": visitor.get("risk_level", "LOW")},
+            metadata={"risk_level": sanitize_log_value(visitor.get("risk_level", "LOW"))},
             created_at=_datetime_or_now(visitor.get("created_at")),
         )
     ]
@@ -623,10 +624,10 @@ def _build_timeline(
         TimelineItem(
             id=str(pdf.get("_id", "")),
             item_type="PDF",
-            title=str(pdf.get("title", "PDF generated")),
+            title=sanitize_plain_text(str(pdf.get("title", "PDF generated")), max_length=120),
             metadata={
-                "file_name": pdf.get("file_name", ""),
-                "generation_type": pdf.get("generation_type", ""),
+                "file_name": sanitize_log_value(pdf.get("file_name", "")),
+                "generation_type": sanitize_log_value(pdf.get("generation_type", "")),
             },
             created_at=_datetime_or_now(pdf.get("created_at")),
         )
@@ -636,11 +637,11 @@ def _build_timeline(
         TimelineItem(
             id=str(event.get("id") or event.get("_id") or ""),
             item_type="FRAUD_EVENT",
-            title=str(event.get("event_type", "")),
+            title=sanitize_log_value(event.get("event_type", "")),
             metadata={
-                "severity": event.get("severity", ""),
+                "severity": sanitize_log_value(event.get("severity", "")),
                 "allowed": bool(event.get("allowed", True)),
-                "reason": event.get("reason"),
+                "reason": sanitize_log_value(event.get("reason")),
             },
             created_at=_datetime_or_now(event.get("created_at")),
         )

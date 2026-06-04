@@ -25,6 +25,13 @@ export function isAdminAuthenticated(): boolean {
   return !!(sessionStorage.getItem(ADMIN_TOKEN_KEY) || sessionStorage.getItem(ADMIN_API_KEY));
 }
 
+function sanitizeMessage(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function getAuthHeaders(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const token = sessionStorage.getItem(ADMIN_TOKEN_KEY);
@@ -35,11 +42,14 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 function messageFromBody(body: unknown, fallback: string): string {
+  if (typeof body === "string") {
+    return sanitizeMessage(body) || fallback;
+  }
   if (!body || typeof body !== "object") return fallback;
   const fields = body as Record<string, unknown>;
   return (
-    (typeof fields.detail === "string" && fields.detail) ||
-    (typeof fields.message === "string" && fields.message) ||
+    (typeof fields.detail === "string" && sanitizeMessage(fields.detail)) ||
+    (typeof fields.message === "string" && sanitizeMessage(fields.message)) ||
     fallback
   );
 }

@@ -21,6 +21,13 @@ export class ApiError extends Error {
   }
 }
 
+function sanitizeMessage(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const ACCESS_TOKEN_KEY = "pdfcraft_access_token";
 const REFRESH_TOKEN_KEY = "pdfcraft_refresh_token";
 
@@ -35,11 +42,15 @@ async function parseResponse(response: Response) {
 function getApiErrorMessage(status: number, body: unknown): string {
   if (typeof body === "object" && body) {
     if ("message" in body && typeof (body as { message: unknown }).message === "string") {
-      return String((body as { message: unknown }).message);
+      return sanitizeMessage(String((body as { message: unknown }).message));
     }
     if ("detail" in body && typeof (body as { detail: unknown }).detail === "string") {
-      return String((body as { detail: unknown }).detail);
+      return sanitizeMessage(String((body as { detail: unknown }).detail));
     }
+  }
+  if (typeof body === "string") {
+    const message = sanitizeMessage(body);
+    if (message) return message;
   }
   if (status >= 500) {
     return "Something went wrong. Please try again.";

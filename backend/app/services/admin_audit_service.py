@@ -2,6 +2,7 @@ from typing import Any
 
 from app.repositories.admin_audit_repository import AdminAuditRepository
 from app.utils.security import generate_uuid, utc_now
+from app.utils.sanitization import sanitize_log_value, sanitize_mapping
 
 
 class AdminAuditService:
@@ -43,10 +44,10 @@ class AdminAuditService:
             {
                 "_id": audit_id,
                 "id": audit_id,
-                "action": action,
-                "target_type": target_type,
-                "target_id": target_id,
-                "metadata": metadata or {},
+                "action": sanitize_log_value(action),
+                "target_type": sanitize_log_value(target_type),
+                "target_id": sanitize_log_value(target_id),
+                "metadata": sanitize_mapping(metadata or {}),
                 "created_at": utc_now(),
             }
         )

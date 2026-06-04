@@ -38,6 +38,7 @@ from app.services.user_usage_service import UserUsageService
 from app.services.visitor_service import VisitorService
 from app.utils.request_utils import get_client_ip_details, get_normalized_client_ip
 from app.utils.pdf_generator import generate_simple_pdf
+from app.utils.sanitization import sanitize_log_value, sanitize_plain_text
 from app.utils.security import generate_uuid, normalize_ip, utc_now
 
 logger = logging.getLogger(__name__)
@@ -472,8 +473,8 @@ class PDFService:
             success=True,
             message="PDF generated successfully.",
             pdf_id=pdf_id,
-            title=payload.title,
-            file_name=file_name,
+            title=sanitize_plain_text(payload.title, max_length=120),
+            file_name=sanitize_log_value(file_name),
             free_limit=int(updated_usage_status["free_limit"]),
             used=int(updated_usage_status["used"]),
             remaining=int(updated_usage_status["remaining"]),
@@ -673,8 +674,8 @@ class PDFService:
             success=True,
             message="PDF generated successfully.",
             pdf_id=pdf_id,
-            title=payload.title,
-            file_name=file_name,
+            title=sanitize_plain_text(payload.title, max_length=120),
+            file_name=sanitize_log_value(file_name),
             plan=usage["plan"],
             limit=usage["limit"],
             used=usage["used"],
@@ -871,9 +872,9 @@ def _build_history_item(pdf_record: dict[str, Any]) -> PDFHistoryItem:
     """
     return PDFHistoryItem(
         pdf_id=pdf_record["_id"],
-        title=pdf_record.get("title", ""),
-        file_name=pdf_record.get("file_name", ""),
-        generation_type=pdf_record.get("generation_type", PDFGenerationType.ANONYMOUS.value),
+        title=sanitize_plain_text(str(pdf_record.get("title", "")), max_length=120),
+        file_name=sanitize_log_value(pdf_record.get("file_name", "")),
+        generation_type=sanitize_log_value(pdf_record.get("generation_type", PDFGenerationType.ANONYMOUS.value)),
         created_at=pdf_record["created_at"],
     )
 
@@ -890,8 +891,8 @@ def _build_my_history_item(pdf_record: dict[str, Any]) -> MyPDFHistoryItem:
     """
     return MyPDFHistoryItem(
         pdf_id=pdf_record["_id"],
-        title=pdf_record.get("title", ""),
-        file_name=pdf_record.get("file_name", ""),
+        title=sanitize_plain_text(str(pdf_record.get("title", "")), max_length=120),
+        file_name=sanitize_log_value(pdf_record.get("file_name", "")),
         created_at=pdf_record["created_at"],
         download_url=f"/api/pdf/download/{pdf_record['_id']}",
     )

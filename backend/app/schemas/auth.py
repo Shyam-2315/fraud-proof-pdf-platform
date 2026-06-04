@@ -3,6 +3,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 from email_validator import EmailNotValidError, validate_email
 
+from app.utils.sanitization import contains_xss_payload, sanitize_plain_text
+
 
 class UserRegisterRequest(BaseModel):
     """Validated request payload for customer registration."""
@@ -24,6 +26,16 @@ class UserRegisterRequest(BaseModel):
             Canonical normalized email address.
         """
         return _normalize_email(value)
+
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if contains_xss_payload(value):
+            raise ValueError("Full name contains unsafe HTML or script content.")
+        sanitized = sanitize_plain_text(value, max_length=100)
+        return sanitized or None
 
 
 class UserLoginRequest(BaseModel):

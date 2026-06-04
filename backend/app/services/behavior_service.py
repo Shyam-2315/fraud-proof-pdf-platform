@@ -10,6 +10,7 @@ from app.repositories.visitor_repository import VisitorRepository
 from app.schemas.behavior import BehaviorEventRequest
 from app.services.visitor_resolution import VisitorResolutionService
 from app.utils.security import generate_uuid, utc_now
+from app.utils.sanitization import sanitize_mapping
 
 
 class BehaviorService:
@@ -137,7 +138,7 @@ def _safe_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Operation result represented as `dict[str, Any]`.
     """
-    safe = dict(metadata)
+    safe = sanitize_mapping(dict(metadata))
     if "content" in safe:
         safe["content_hash"] = content_hash(str(safe.pop("content")))
     if "title" in safe:

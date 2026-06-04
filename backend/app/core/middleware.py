@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.repositories.request_log_repository import RequestLogRepository
 from app.utils.request_utils import get_client_ip
+from app.utils.sanitization import sanitize_log_value
 
 logger = logging.getLogger("app.request")
 request_log_repository = RequestLogRepository()
@@ -32,7 +33,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         Returns:
             HTTP response with the request ID header attached.
         """
-        request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        request_id = sanitize_log_value(request.headers.get("X-Request-ID", str(uuid.uuid4())))
         request.state.request_id = request_id
 
         response = await call_next(request)
@@ -125,6 +126,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=(), payment=()"
         )
+        response.headers["Content-Security-Policy"] = _build_content_security_policy(request)
         return response
 
 
@@ -145,19 +147,19 @@ async def _store_api_request_log(
         client_ip: Normalized client IP value used by runtime logs.
         request_id: Request correlation identifier.
     """
-    path = request.url.path
+    path = sanitize_log_value(request.url.path)
     if not path.startswith("/api"):
         return
     try:
         await request_log_repository.create_log(
             {
-                "request_id": request_id,
-                "method": request.method,
+                "request_id": sanitize_log_value(request_id),
+                "method": sanitize_log_value(request.method),
                 "path": path,
                 "status_code": status_code,
                 "duration_ms": duration_ms,
-                "client_ip": client_ip,
-                "block_reason": getattr(request.state, "block_reason", None),
+                "client_ip": sanitize_log_value(client_ip),
+                "block_reason": sanitize_log_value(getattr(request.state, "block_reason", None)),
                 "fraud_score": getattr(request.state, "fraud_score", None),
             }
         )
@@ -168,3 +170,24 @@ async def _store_api_request_log(
             path,
             exc,
         )
+
+
+def _build_content_security_policy(request: Request) -> str:
+    """Return a strict CSP that preserves local development websocket traffic."""
+    connect_src = ["'self'"]
+    origin = request.headers.get("origin")
+    if origin:
+        connect_src.append(origin)
+    if request.url.hostname in {"localhost", "127.0.0.1"}:
+        connect_src.extend(["ws://localhost:*", "ws://127.0.0.1:*"])
+    return (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        f"connect-src {' '.join(dict.fromkeys(connect_src))}; "
+        "img-src 'self' data: blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    )

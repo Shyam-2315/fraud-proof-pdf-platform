@@ -27,6 +27,7 @@ from app.schemas.admin_monitoring import (
 )
 from app.services.user_usage_service import get_billing_period, get_month_key, get_plan_limit
 from app.utils.security import utc_now
+from app.utils.sanitization import sanitize_log_value, sanitize_plain_text
 
 
 class AdminMonitoringService:
@@ -120,14 +121,14 @@ class AdminMonitoringService:
         total = await self.request_log_repository.count_logs(
             method=method,
             status_code=status_code,
-            path=path,
+            path=sanitize_plain_text(path, max_length=256) if path else None,
         )
         logs = await self.request_log_repository.list_recent(
             limit=limit,
             offset=offset,
             method=method,
             status_code=status_code,
-            path=path,
+            path=sanitize_plain_text(path, max_length=256) if path else None,
         )
         return AdminRequestLogListResponse(
             total=total,
@@ -158,14 +159,14 @@ class AdminMonitoringService:
             Paginated admin-safe user list.
         """
         total = await self.user_repository.count_for_admin(
-            search=search,
+            search=sanitize_plain_text(search, max_length=120) if search else None,
             plan=plan,
             is_active=is_active,
         )
         users = await self.user_repository.list_for_admin(
             limit=limit,
             offset=offset,
-            search=search,
+            search=sanitize_plain_text(search, max_length=120) if search else None,
             plan=plan,
             is_active=is_active,
         )
@@ -243,8 +244,8 @@ class AdminMonitoringService:
         return AdminUserManagementItem(
             user_id=str(user.get("_id", "")),
             email=str(user.get("email", "")),
-            full_name=user.get("full_name"),
-            role=str(user.get("role", "")),
+            full_name=sanitize_plain_text(user.get("full_name"), max_length=100) if user.get("full_name") else None,
+            role=sanitize_log_value(user.get("role", "")),
             plan=plan,
             is_active=bool(user.get("is_active", True)),
             is_verified=bool(user.get("is_verified", False)),
@@ -309,13 +310,13 @@ def _health_text(value: bool | str) -> str:
 def _build_request_log_item(log: dict[str, Any]) -> AdminRequestLogItem:
     fraud_score = log.get("fraud_score")
     return AdminRequestLogItem(
-        request_id=str(log.get("request_id", "")),
-        method=str(log.get("method", "")),
-        path=str(log.get("path", "")),
+        request_id=sanitize_log_value(log.get("request_id", "")),
+        method=sanitize_log_value(log.get("method", "")),
+        path=sanitize_log_value(log.get("path", "")),
         status_code=int(log.get("status_code", 0)),
         duration_ms=float(log.get("duration_ms", 0)),
-        client_ip=log.get("client_ip"),
-        block_reason=log.get("block_reason"),
+        client_ip=sanitize_log_value(log.get("client_ip")),
+        block_reason=sanitize_log_value(log.get("block_reason")),
         fraud_score=float(fraud_score) if fraud_score is not None else None,
         created_at=_datetime_or_now(log.get("created_at")),
     )

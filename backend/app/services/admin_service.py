@@ -24,6 +24,7 @@ from app.schemas.admin import (
 )
 from app.services.visitor_service import build_usage_summary
 from app.utils.security import utc_now
+from app.utils.sanitization import sanitize_log_value, sanitize_plain_text, sanitize_mapping
 
 
 class AdminService:
@@ -198,19 +199,19 @@ class AdminService:
         usage_summary = build_usage_summary(visitor)
         return AdminVisitorDetailResponse(
             visitor_id=str(visitor.get("_id", "")),
-            cookie_id=visitor.get("cookie_id"),
+            cookie_id=sanitize_log_value(visitor.get("cookie_id")),
             local_storage_ids=_string_list(visitor.get("local_storage_ids", [])),
             session_ids=_string_list(visitor.get("session_ids", [])),
             fingerprint_hashes=_string_list(visitor.get("fingerprint_hashes", [])),
-            primary_fingerprint_hash=visitor.get("primary_fingerprint_hash"),
+            primary_fingerprint_hash=sanitize_log_value(visitor.get("primary_fingerprint_hash")),
             ip_addresses=_string_list(visitor.get("ip_addresses", [])),
             user_agents=_string_list(visitor.get("user_agents", [])),
-            device_info=dict(visitor.get("device_info", {})),
+            device_info=sanitize_mapping(dict(visitor.get("device_info", {}))),
             **usage_summary,
             risk_score=int(visitor.get("risk_score", 0)),
-            risk_level=str(visitor.get("risk_level", "LOW")),
+            risk_level=sanitize_log_value(visitor.get("risk_level", "LOW")),
             is_blocked=bool(visitor.get("is_blocked", False)),
-            block_reason=visitor.get("block_reason"),
+            block_reason=sanitize_log_value(visitor.get("block_reason")),
             created_at=_datetime_or_now(visitor.get("created_at")),
             last_seen_at=_datetime_or_now(visitor.get("last_seen_at")),
             generated_pdfs=[
@@ -412,8 +413,8 @@ class AdminService:
         )
         return AdminUserListItem(
             user_id=user_id,
-            email=str(user.get("email", "")),
-            full_name=user.get("full_name"),
+            email=sanitize_log_value(user.get("email", "")),
+            full_name=sanitize_plain_text(user.get("full_name"), max_length=100) if user.get("full_name") else None,
             is_active=bool(user.get("is_active", False)),
             is_verified=bool(user.get("email_verified", user.get("is_verified", False))),
             linked_visitor_count=len(user.get("linked_visitor_ids", [])),
@@ -453,9 +454,9 @@ def _build_visitor_list_item(visitor: dict[str, Any]) -> AdminVisitorListItem:
         visitor_id=str(visitor.get("_id", "")),
         **usage_summary,
         risk_score=int(visitor.get("risk_score", 0)),
-        risk_level=str(visitor.get("risk_level", "LOW")),
+        risk_level=sanitize_log_value(visitor.get("risk_level", "LOW")),
         is_blocked=bool(visitor.get("is_blocked", False)),
-        block_reason=visitor.get("block_reason"),
+        block_reason=sanitize_log_value(visitor.get("block_reason")),
         ip_count=len(visitor.get("ip_addresses", [])),
         session_count=len(visitor.get("session_ids", [])),
         fingerprint_count=len(visitor.get("fingerprint_hashes", [])),
@@ -477,14 +478,14 @@ def _build_pdf_list_item(pdf: dict[str, Any]) -> AdminPDFListItem:
     """
     return AdminPDFListItem(
         pdf_id=str(pdf.get("_id", "")),
-        visitor_id=pdf.get("visitor_id"),
-        user_id=pdf.get("user_id"),
-        title=str(pdf.get("title", "")),
-        file_name=str(pdf.get("file_name", "")),
-        file_path=str(pdf.get("file_path", "")),
-        generation_type=str(pdf.get("generation_type", "")),
-        ip_address=pdf.get("ip_address"),
-        fingerprint_hash=pdf.get("fingerprint_hash"),
+        visitor_id=sanitize_log_value(pdf.get("visitor_id")),
+        user_id=sanitize_log_value(pdf.get("user_id")),
+        title=sanitize_plain_text(str(pdf.get("title", "")), max_length=120),
+        file_name=sanitize_log_value(pdf.get("file_name", "")),
+        file_path=sanitize_log_value(pdf.get("file_path", "")),
+        generation_type=sanitize_log_value(pdf.get("generation_type", "")),
+        ip_address=sanitize_log_value(pdf.get("ip_address")),
+        fingerprint_hash=sanitize_log_value(pdf.get("fingerprint_hash")),
         created_at=_datetime_or_now(pdf.get("created_at")),
     )
 
@@ -501,12 +502,12 @@ def _build_fraud_event_item(event: dict[str, Any]) -> dict[str, Any]:
     """
     return {
         "event_id": str(event.get("_id", "")),
-        "visitor_id": event.get("visitor_id"),
-        "event_type": str(event.get("event_type", "")),
-        "severity": str(event.get("severity", "")),
+        "visitor_id": sanitize_log_value(event.get("visitor_id")),
+        "event_type": sanitize_log_value(event.get("event_type", "")),
+        "severity": sanitize_log_value(event.get("severity", "")),
         "risk_points": int(event.get("risk_points", 0)),
-        "message": str(event.get("message", "")),
-        "signals": dict(event.get("signals", {})),
+        "message": sanitize_log_value(event.get("message", "")),
+        "signals": sanitize_mapping(dict(event.get("signals", {}))),
         "created_at": _datetime_or_now(event.get("created_at")),
     }
 
@@ -523,9 +524,9 @@ def _build_blocked_entity_item(entity: dict[str, Any]) -> AdminBlockedEntityItem
     """
     return AdminBlockedEntityItem(
         entity_id=str(entity.get("_id", "")),
-        entity_type=str(entity.get("entity_type", "")),
-        entity_value=str(entity.get("entity_value", "")),
-        reason=str(entity.get("reason", "")),
+        entity_type=sanitize_log_value(entity.get("entity_type", "")),
+        entity_value=sanitize_log_value(entity.get("entity_value", "")),
+        reason=sanitize_log_value(entity.get("reason", "")),
         risk_score=int(entity.get("risk_score", 0)),
         is_active=bool(entity.get("is_active", False)),
         created_at=_datetime_or_now(entity.get("created_at")),
@@ -586,7 +587,7 @@ def _string_list(values: Any) -> list[str]:
     """
     if not isinstance(values, list):
         return []
-    return [str(value) for value in values]
+    return [sanitize_log_value(value) for value in values]
 
 
 def _remove_none(values: dict[str, Any]) -> dict[str, Any]:
