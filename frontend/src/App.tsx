@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import AccountPage from "./pages/AccountPage";
+import DashboardPage from "./pages/DashboardPage";
 import GeneratePage from "./pages/GeneratePage";
 import HistoryPage from "./pages/HistoryPage";
 import LandingPage from "./pages/LandingPage";
@@ -7,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import PricingPage from "./pages/PricingPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import SignupPage from "./pages/SignupPage";
+import ToolsPage from "./pages/ToolsPage";
 import UsagePage from "./pages/UsagePage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
 
@@ -15,6 +17,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/generate" element={<GeneratePage />} />
+      <Route path="/tools" element={<ToolsPage />} />
       <Route path="/usage" element={<UsagePage />} />
       <Route path="/history" element={<HistoryPage />} />
       <Route path="/pricing" element={<PricingPage />} />
@@ -22,6 +25,7 @@ export default function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route element={<ProtectedRoute />}>
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/account" element={<AccountPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

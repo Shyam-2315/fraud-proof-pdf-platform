@@ -1,14 +1,16 @@
-import { BarChart3, CreditCard, FileText, History, Home, LogIn, LogOut, UserPlus, UserRound } from "lucide-react";
+import { BarChart3, CreditCard, FileText, History, Home, LayoutDashboard, LogIn, LogOut, UserPlus, UserRound, Wrench } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const publicLinks = [
   { to: "/", label: "Home", icon: Home },
+  { to: "/tools", label: "Tools", icon: Wrench },
   { to: "/generate", label: "Generate", icon: FileText },
   { to: "/pricing", label: "Pricing", icon: CreditCard },
 ];
 
 const accountLinks = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/history", label: "My PDFs", icon: History },
   { to: "/usage", label: "Usage", icon: BarChart3 },
 ];

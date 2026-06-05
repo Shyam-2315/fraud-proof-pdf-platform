@@ -28,6 +28,8 @@ export type GeneratePdfResponse = {
   pdf_id?: string;
   title?: string;
   file_name?: string;
+  download_url?: string;
+  tool?: string;
   free_limit?: number;
   free_usage_count?: number;
   free_usage_limit?: number;
@@ -44,6 +46,7 @@ export type PdfHistoryItem = {
   pdf_id: string;
   title: string;
   file_name: string;
+  tool?: string;
   created_at: string;
   download_url: string;
 };
@@ -115,6 +118,20 @@ export function generatePdf(payload: { title: string; content: string }) {
   return customerRequest<GeneratePdfResponse>("/api/pdf/generate", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function textToPdf(payload: { title: string; content: string }) {
+  return customerRequest<GeneratePdfResponse>("/api/pdf/tools/text-to-pdf", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function uploadPdfTool(path: string, formData: FormData) {
+  return customerRequest<GeneratePdfResponse>(path, {
+    method: "POST",
+    body: formData,
   });
 }
 

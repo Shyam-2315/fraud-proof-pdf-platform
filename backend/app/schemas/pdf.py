@@ -33,6 +33,8 @@ class PDFGenerateResponse(BaseModel):
     pdf_id: str | None = None
     title: str | None = None
     file_name: str | None = None
+    download_url: str | None = None
+    tool: str | None = None
     free_limit: int | None = None
     free_usage_count: int | None = None
     free_usage_limit: int | None = None
@@ -53,6 +55,7 @@ class PDFHistoryItem(BaseModel):
     title: str
     file_name: str
     generation_type: str
+    tool: str | None = None
     created_at: datetime
 
 
@@ -72,6 +75,7 @@ class MyPDFHistoryItem(BaseModel):
     pdf_id: str
     title: str
     file_name: str
+    tool: str | None = None
     created_at: datetime
     download_url: str
 

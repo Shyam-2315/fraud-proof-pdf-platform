@@ -95,6 +95,7 @@ class AdminService:
             authenticated_pdfs=authenticated_pdfs,
             blocked_visitors=blocked_visitors,
             high_risk_visitors=high_risk_visitors,
+            suspicious_users=high_risk_visitors,
             total_fraud_events=total_fraud_events,
             blocked_entities=blocked_entities,
             conversion_count=conversion_count,

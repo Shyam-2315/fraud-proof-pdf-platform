@@ -70,6 +70,8 @@ class BaseAppSettings(BaseSettings):
     ENABLE_DEFAULT_ADMIN_SEED: bool = False
 
     PDF_STORAGE_DIR: str = "storage/generated_pdfs"
+    PDF_TOOL_MAX_UPLOAD_BYTES: int = 10 * 1024 * 1024
+    PDF_TOOL_MAX_FILES: int = 20
     SECURE_COOKIES: bool = False
     COOKIE_SAMESITE: str = "lax"
     COOKIE_DOMAIN: str | None = None

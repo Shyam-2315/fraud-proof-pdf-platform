@@ -17,6 +17,7 @@ class AdminDashboardResponse(BaseModel):
     authenticated_pdfs: int
     blocked_visitors: int
     high_risk_visitors: int
+    suspicious_users: int
     total_fraud_events: int
     blocked_entities: int
     conversion_count: int

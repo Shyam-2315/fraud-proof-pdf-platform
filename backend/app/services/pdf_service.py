@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -43,6 +44,7 @@ from app.utils.security import generate_uuid, normalize_ip, utc_now
 
 logger = logging.getLogger(__name__)
 _AUTH_CONTEXT_UNSET = object()
+PDFFileBuilder = Callable[[], tuple[str, str]]
 
 
 class PDFService:
@@ -117,6 +119,8 @@ class PDFService:
         request: Request,
         payload: PDFGenerateRequest,
         current_user: dict[str, Any] | None | object = _AUTH_CONTEXT_UNSET,
+        file_builder: PDFFileBuilder | None = None,
+        tool: str = "TEXT_TO_PDF",
     ) -> PDFGenerateResponse:
         """
         Generate a PDF while enforcing usage, fraud, and ownership rules.
@@ -138,6 +142,8 @@ class PDFService:
                 payload=payload,
                 current_user=current_user,
                 visitor=visitor,
+                file_builder=file_builder,
+                tool=tool,
             )
 
         visitor = await self._get_visitor_from_request(request)
@@ -145,6 +151,8 @@ class PDFService:
             request=request,
             payload=payload,
             visitor=visitor,
+            file_builder=file_builder,
+            tool=tool,
         )
 
     async def _generate_pdf_for_anonymous_visitor(
@@ -152,6 +160,8 @@ class PDFService:
         request: Request,
         payload: PDFGenerateRequest,
         visitor: dict[str, Any],
+        file_builder: PDFFileBuilder | None = None,
+        tool: str = "TEXT_TO_PDF",
     ) -> PDFGenerateResponse:
         """
         Generate Pdf For Anonymous Visitor for the requested operation.
@@ -393,11 +403,9 @@ class PDFService:
             )
 
         try:
-            file_name, file_path = await asyncio.to_thread(
-                generate_simple_pdf,
-                title=payload.title,
-                content=payload.content,
-                output_dir=self.settings.PDF_STORAGE_DIR,
+            file_name, file_path = await self._run_file_builder(
+                payload=payload,
+                file_builder=file_builder,
             )
             pdf_id = generate_uuid()
             pdf_data = {
@@ -408,6 +416,7 @@ class PDFService:
                 "content": payload.content,
                 "file_name": file_name,
                 "file_path": file_path,
+                "tool": tool,
                 "generation_type": PDFGenerationType.ANONYMOUS.value,
                 "owner_type": PDFOwnerType.ANONYMOUS.value,
                 "created_at": utc_now(),
@@ -435,7 +444,7 @@ class PDFService:
                 severity=AdminFraudSeverity.LOW.value,
                 action="PDF generation allowed.",
                 allowed=True,
-                metadata={"pdf_id": pdf_id, "title": payload.title},
+                metadata={"pdf_id": pdf_id, "title": payload.title, "tool": tool},
             )
             await self.behavior_service.record_internal_event(
                 visitor_id=updated_visitor["_id"],
@@ -451,6 +460,8 @@ class PDFService:
             )
         except HTTPException:
             raise
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         except Exception as exc:
             logger.exception(
                 "Anonymous PDF generation failed visitor_id=%s ip=%s has_anon_id=%s has_fingerprint=%s",
@@ -475,6 +486,8 @@ class PDFService:
             pdf_id=pdf_id,
             title=sanitize_plain_text(payload.title, max_length=120),
             file_name=sanitize_log_value(file_name),
+            download_url=f"/api/pdf/download/{pdf_id}",
+            tool=sanitize_log_value(tool),
             free_limit=int(updated_usage_status["free_limit"]),
             used=int(updated_usage_status["used"]),
             remaining=int(updated_usage_status["remaining"]),
@@ -567,6 +580,8 @@ class PDFService:
         payload: PDFGenerateRequest,
         current_user: dict[str, Any],
         visitor: dict[str, Any] | None,
+        file_builder: PDFFileBuilder | None = None,
+        tool: str = "TEXT_TO_PDF",
     ) -> PDFGenerateResponse:
         """
         Generate Pdf For Authenticated User for the requested operation.
@@ -619,11 +634,9 @@ class PDFService:
                 )
 
         try:
-            file_name, file_path = await asyncio.to_thread(
-                generate_simple_pdf,
-                title=payload.title,
-                content=payload.content,
-                output_dir=self.settings.PDF_STORAGE_DIR,
+            file_name, file_path = await self._run_file_builder(
+                payload=payload,
+                file_builder=file_builder,
             )
             pdf_id = generate_uuid()
             pdf_data = {
@@ -634,6 +647,7 @@ class PDFService:
                 "content": payload.content,
                 "file_name": file_name,
                 "file_path": file_path,
+                "tool": tool,
                 "generation_type": PDFGenerationType.AUTHENTICATED.value,
                 "owner_type": PDFOwnerType.USER.value,
                 "created_at": utc_now(),
@@ -664,6 +678,8 @@ class PDFService:
                 )
         except HTTPException:
             raise
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -676,10 +692,36 @@ class PDFService:
             pdf_id=pdf_id,
             title=sanitize_plain_text(payload.title, max_length=120),
             file_name=sanitize_log_value(file_name),
+            download_url=f"/api/pdf/download/{pdf_id}",
+            tool=sanitize_log_value(tool),
             plan=usage["plan"],
             limit=usage["limit"],
             used=usage["used"],
             remaining=usage["remaining"],
+        )
+
+    async def _run_file_builder(
+        self,
+        payload: PDFGenerateRequest,
+        file_builder: PDFFileBuilder | None,
+    ) -> tuple[str, str]:
+        """
+        Generate the output file after quota and fraud checks have passed.
+
+        Args:
+            payload: PDF generation payload used by the default text generator.
+            file_builder: Optional custom tool writer returning file metadata.
+
+        Returns:
+            Generated PDF file name and absolute path.
+        """
+        if file_builder is not None:
+            return await asyncio.to_thread(file_builder)
+        return await asyncio.to_thread(
+            generate_simple_pdf,
+            title=payload.title,
+            content=payload.content,
+            output_dir=self.settings.PDF_STORAGE_DIR,
         )
 
     async def get_downloadable_pdf(
@@ -875,6 +917,7 @@ def _build_history_item(pdf_record: dict[str, Any]) -> PDFHistoryItem:
         title=sanitize_plain_text(str(pdf_record.get("title", "")), max_length=120),
         file_name=sanitize_log_value(pdf_record.get("file_name", "")),
         generation_type=sanitize_log_value(pdf_record.get("generation_type", PDFGenerationType.ANONYMOUS.value)),
+        tool=sanitize_log_value(pdf_record.get("tool", "TEXT_TO_PDF")),
         created_at=pdf_record["created_at"],
     )
 
@@ -893,6 +936,7 @@ def _build_my_history_item(pdf_record: dict[str, Any]) -> MyPDFHistoryItem:
         pdf_id=pdf_record["_id"],
         title=sanitize_plain_text(str(pdf_record.get("title", "")), max_length=120),
         file_name=sanitize_log_value(pdf_record.get("file_name", "")),
+        tool=sanitize_log_value(pdf_record.get("tool", "TEXT_TO_PDF")),
         created_at=pdf_record["created_at"],
         download_url=f"/api/pdf/download/{pdf_record['_id']}",
     )

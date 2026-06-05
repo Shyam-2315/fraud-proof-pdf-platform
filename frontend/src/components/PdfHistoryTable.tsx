@@ -19,6 +19,7 @@ export default function PdfHistoryTable({ items }: { items: PdfHistoryItem[] }) 
         <thead>
           <tr>
             <th>PDF title</th>
+            <th>Tool</th>
             <th>File name</th>
             <th>Created</th>
             <th>Download</th>
@@ -28,6 +29,7 @@ export default function PdfHistoryTable({ items }: { items: PdfHistoryItem[] }) 
           {items.map((item) => (
             <tr key={item.pdf_id}>
               <td className="font-bold text-[#10213f]">{item.title}</td>
+              <td>{formatTool(item.tool)}</td>
               <td>{item.file_name}</td>
               <td>{formatDate(item.created_at)}</td>
               <td>
@@ -46,6 +48,14 @@ export default function PdfHistoryTable({ items }: { items: PdfHistoryItem[] }) 
       </table>
     </div>
   );
+}
+
+function formatTool(value?: string) {
+  return (value || "TEXT_TO_PDF")
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 async function downloadPdf(item: PdfHistoryItem) {
